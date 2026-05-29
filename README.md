@@ -226,8 +226,4 @@ Upcoming Phases:
 4. Testing
 5. Deployment
 
----
 
-## Author
-
-Developed as an internship project using the MERN Stack.
