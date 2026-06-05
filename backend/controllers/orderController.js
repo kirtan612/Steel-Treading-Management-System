@@ -1,9 +1,57 @@
-const Order = require("../models/Order");
-const Customer = require("../models/Customer");
-const Inventory = require("../models/Inventory");
+const { Order, Customer, Inventory, User } = require("../models");
 const { generateOrderNumber } = require("../utils/generateNumbers");
 const calcGST = require("../utils/calcGST");
 const { validationResult } = require("express-validator");
+const { Op } = require("sequelize");
+const { sequelize } = require("../config/database");
+
+// Helper to resolve/populate user names in JSONB statusHistory array
+const populateStatusHistory = async (orders) => {
+  const isArray = Array.isArray(orders);
+  const ordersList = isArray ? orders : [orders];
+  
+  // Extract all changedBy user IDs
+  const userIds = new Set();
+  ordersList.forEach(order => {
+    const history = order.statusHistory || [];
+    history.forEach(h => {
+      if (h.changedBy) userIds.add(h.changedBy);
+    });
+  });
+
+  if (userIds.size === 0) return;
+
+  // Fetch users
+  const users = await User.findAll({
+    where: { id: Array.from(userIds) },
+    attributes: ['id', 'name']
+  });
+
+  const userMap = {};
+  users.forEach(u => {
+    userMap[u.id] = u.name;
+  });
+
+  // Attach populated user details to statusHistory
+  ordersList.forEach(order => {
+    const history = order.statusHistory || [];
+    order.statusHistory = history.map(h => ({
+      ...h,
+      changedBy: h.changedBy ? { id: h.changedBy, name: userMap[h.changedBy] || 'Unknown' } : null
+    }));
+  });
+};
+
+const formatOrderResponse = (orderInstance) => {
+  if (!orderInstance) return null;
+  const order = orderInstance.toJSON ? orderInstance.toJSON() : { ...orderInstance };
+  
+  if (order.creator) {
+    order.createdBy = order.creator;
+    delete order.creator;
+  }
+  return order;
+};
 
 // GET /api/v1/orders
 const getAllOrders = async (req, res, next) => {
@@ -26,39 +74,38 @@ const getAllOrders = async (req, res, next) => {
 
     // Search functionality
     if (search) {
-      query.$or = [
-        { orderNumber: { $regex: search, $options: "i" } }
-      ];
+      query.orderNumber = { [Op.iLike]: `%${search}%` };
     }
 
     if (status) query.status = status;
     if (paymentStatus) query.paymentStatus = paymentStatus;
-    if (customerId) query.customer = customerId;
+    if (customerId) query.customerId = customerId;
 
     // Date range filter
     if (startDate || endDate) {
       query.createdAt = {};
-      if (startDate) query.createdAt.$gte = new Date(startDate);
-      if (endDate) query.createdAt.$lte = new Date(endDate);
+      if (startDate) query.createdAt[Op.gte] = new Date(startDate);
+      if (endDate) query.createdAt[Op.lte] = new Date(endDate);
     }
 
-    const sortOptions = {};
-    sortOptions[sortBy] = sortOrder === "asc" ? 1 : -1;
+    const { rows: orders, count: total } = await Order.findAndCountAll({
+      where: query,
+      order: [[sortBy, sortOrder.toUpperCase()]],
+      offset: parseInt(skip),
+      limit: parseInt(limit),
+      include: [
+        { model: Customer, as: 'customer', attributes: ['id', 'name', 'company', 'phone', 'customerCode'] },
+        { model: User, as: 'creator', attributes: ['name'] }
+      ]
+    });
 
-    const orders = await Order.find(query)
-      .sort(sortOptions)
-      .skip(skip)
-      .limit(parseInt(limit))
-      .populate("customer", "name company phone customerCode")
-      .populate("createdBy", "name")
-      .populate("statusHistory.changedBy", "name");
-
-    const total = await Order.countDocuments(query);
+    const formattedOrders = orders.map(formatOrderResponse);
+    await populateStatusHistory(formattedOrders);
 
     res.json({
       success: true,
       data: {
-        orders,
+        orders: formattedOrders,
         pagination: {
           currentPage: parseInt(page),
           totalPages: Math.ceil(total / limit),
@@ -74,16 +121,22 @@ const getAllOrders = async (req, res, next) => {
 // GET /api/v1/orders/:id
 const getOrderById = async (req, res, next) => {
   try {
-    const order = await Order.findOne({ _id: req.params.id, isDeleted: false })
-      .populate("customer")
-      .populate("createdBy", "name email")
-      .populate("statusHistory.changedBy", "name");
+    const order = await Order.findOne({
+      where: { id: req.params.id, isDeleted: false },
+      include: [
+        { model: Customer, as: 'customer' },
+        { model: User, as: 'creator', attributes: ['name', 'email'] }
+      ]
+    });
     
     if (!order) {
       return res.status(404).json({ success: false, message: "Order not found" });
     }
 
-    res.json({ success: true, data: order });
+    const formattedOrder = formatOrderResponse(order);
+    await populateStatusHistory(formattedOrder);
+
+    res.json({ success: true, data: formattedOrder });
   } catch (error) { next(error); }
 };
 
@@ -98,7 +151,7 @@ const createOrder = async (req, res, next) => {
     const { customer: customerId, items, discountAmount = 0, notes } = req.body;
 
     // Validate customer
-    const customer = await Customer.findById(customerId);
+    const customer = await Customer.findByPk(customerId);
     if (!customer || !customer.isActive) {
       return res.status(400).json({ success: false, message: "Invalid or inactive customer" });
     }
@@ -108,7 +161,7 @@ const createOrder = async (req, res, next) => {
     let subtotal = 0;
 
     for (const item of items) {
-      const inventoryItem = await Inventory.findById(item.inventoryItem);
+      const inventoryItem = await Inventory.findByPk(item.inventoryItem);
       if (!inventoryItem) {
         return res.status(400).json({ success: false, message: `Inventory item not found: ${item.inventoryItem}` });
       }
@@ -127,17 +180,15 @@ const createOrder = async (req, res, next) => {
 
     // Calculate taxes
     const taxableAmount = subtotal - discountAmount;
-    const { cgst, sgst, igst, totalTax } = calcGST(
-      taxableAmount,
-      customer.billingAddress?.state || "Gujarat"
-    );
+    const customerState = customer.billingState || "Gujarat";
+    const { cgst, sgst, igst, totalTax } = calcGST(taxableAmount, customerState);
 
     const grandTotal = taxableAmount + totalTax;
     const orderNumber = await generateOrderNumber();
 
-    const order = new Order({
+    const order = await Order.create({
       orderNumber,
-      customer: customerId,
+      customerId,
       items: populatedItems,
       subtotal: parseFloat(subtotal.toFixed(2)),
       discountAmount: parseFloat(discountAmount.toFixed(2)),
@@ -156,16 +207,20 @@ const createOrder = async (req, res, next) => {
       createdBy: req.user.id
     });
 
-    await order.save();
-    await order.populate([
-      { path: "customer", select: "name company phone" },
-      { path: "createdBy", select: "name" }
-    ]);
+    const savedOrder = await Order.findByPk(order.id, {
+      include: [
+        { model: Customer, as: 'customer', attributes: ['name', 'company', 'phone'] },
+        { model: User, as: 'creator', attributes: ['name'] }
+      ]
+    });
+
+    const formattedOrder = formatOrderResponse(savedOrder);
+    await populateStatusHistory(formattedOrder);
 
     res.status(201).json({
       success: true,
       message: "Order created successfully",
-      data: order
+      data: formattedOrder
     });
   } catch (error) { next(error); }
 };
@@ -173,7 +228,7 @@ const createOrder = async (req, res, next) => {
 // PUT /api/v1/orders/:id
 const updateOrder = async (req, res, next) => {
   try {
-    const order = await Order.findOne({ _id: req.params.id, isDeleted: false });
+    const order = await Order.findOne({ where: { id: req.params.id, isDeleted: false } });
     if (!order) {
       return res.status(404).json({ success: false, message: "Order not found" });
     }
@@ -189,6 +244,7 @@ const updateOrder = async (req, res, next) => {
     }
 
     const { items, discountAmount = 0, notes } = req.body;
+    const updateFields = {};
 
     // Recalculate order totals if items changed
     if (items) {
@@ -196,7 +252,7 @@ const updateOrder = async (req, res, next) => {
       let subtotal = 0;
 
       for (const item of items) {
-        const inventoryItem = await Inventory.findById(item.inventoryItem);
+        const inventoryItem = await Inventory.findByPk(item.inventoryItem);
         if (!inventoryItem) {
           return res.status(400).json({ success: false, message: `Inventory item not found: ${item.inventoryItem}` });
         }
@@ -213,36 +269,40 @@ const updateOrder = async (req, res, next) => {
         });
       }
 
-      const customer = await Customer.findById(order.customer);
+      const customer = await Customer.findByPk(order.customerId);
       const taxableAmount = subtotal - discountAmount;
-      const { cgst, sgst, igst, totalTax } = calcGST(
-        taxableAmount,
-        customer.billingAddress?.state || "Gujarat"
-      );
+      const customerState = customer.billingState || "Gujarat";
+      const { cgst, sgst, igst, totalTax } = calcGST(taxableAmount, customerState);
 
-      order.items = populatedItems;
-      order.subtotal = parseFloat(subtotal.toFixed(2));
-      order.discountAmount = parseFloat(discountAmount.toFixed(2));
-      order.taxableAmount = parseFloat(taxableAmount.toFixed(2));
-      order.cgst = cgst;
-      order.sgst = sgst;
-      order.igst = igst;
-      order.totalTax = totalTax;
-      order.grandTotal = parseFloat((taxableAmount + totalTax).toFixed(2));
+      updateFields.items = populatedItems;
+      updateFields.subtotal = parseFloat(subtotal.toFixed(2));
+      updateFields.discountAmount = parseFloat(discountAmount.toFixed(2));
+      updateFields.taxableAmount = parseFloat(taxableAmount.toFixed(2));
+      updateFields.cgst = cgst;
+      updateFields.sgst = sgst;
+      updateFields.igst = igst;
+      updateFields.totalTax = totalTax;
+      updateFields.grandTotal = parseFloat((taxableAmount + totalTax).toFixed(2));
     }
 
-    if (notes !== undefined) order.notes = notes;
+    if (notes !== undefined) updateFields.notes = notes;
 
-    await order.save();
-    await order.populate([
-      { path: "customer", select: "name company phone" },
-      { path: "createdBy", select: "name" }
-    ]);
+    await order.update(updateFields);
+
+    const updatedOrder = await Order.findByPk(order.id, {
+      include: [
+        { model: Customer, as: 'customer', attributes: ['name', 'company', 'phone'] },
+        { model: User, as: 'creator', attributes: ['name'] }
+      ]
+    });
+
+    const formattedOrder = formatOrderResponse(updatedOrder);
+    await populateStatusHistory(formattedOrder);
 
     res.json({
       success: true,
       message: "Order updated successfully",
-      data: order
+      data: formattedOrder
     });
   } catch (error) { next(error); }
 };
@@ -257,7 +317,7 @@ const updateOrderStatus = async (req, res, next) => {
       return res.status(400).json({ success: false, message: "Invalid status" });
     }
 
-    const order = await Order.findOne({ _id: req.params.id, isDeleted: false });
+    const order = await Order.findOne({ where: { id: req.params.id, isDeleted: false } });
     if (!order) {
       return res.status(404).json({ success: false, message: "Order not found" });
     }
@@ -282,38 +342,41 @@ const updateOrderStatus = async (req, res, next) => {
     // Update inventory for confirmed orders (reduce stock)
     if (status === "confirmed" && currentStatus === "draft") {
       for (const item of order.items) {
-        await Inventory.findByIdAndUpdate(
-          item.inventoryItem,
-          { $inc: { stockQty: -item.quantity } },
-          { runValidators: false }
-        );
+        const invItem = await Inventory.findByPk(item.inventoryItem);
+        if (invItem) {
+          const newQty = parseFloat(invItem.stockQty) - parseFloat(item.quantity);
+          await invItem.update({ stockQty: newQty });
+        }
       }
     }
 
     // Restore inventory if order is cancelled from confirmed
     if (status === "cancelled" && currentStatus === "confirmed") {
       for (const item of order.items) {
-        await Inventory.findByIdAndUpdate(
-          item.inventoryItem,
-          { $inc: { stockQty: item.quantity } },
-          { runValidators: false }
-        );
+        const invItem = await Inventory.findByPk(item.inventoryItem);
+        if (invItem) {
+          const newQty = parseFloat(invItem.stockQty) + parseFloat(item.quantity);
+          await invItem.update({ stockQty: newQty });
+        }
       }
     }
 
-    order.status = status;
-    order.statusHistory.push({
+    const history = [...(order.statusHistory || []), {
       status,
       changedBy: req.user.id,
-      note: note || `Status changed to ${status}`
-    });
+      note: note || `Status changed to ${status}`,
+      changedAt: new Date()
+    }];
 
-    await order.save();
+    await order.update({
+      status,
+      statusHistory: history
+    });
 
     res.json({
       success: true,
       message: `Order status updated to ${status}`,
-      data: { status, statusHistory: order.statusHistory }
+      data: { status, statusHistory: history }
     });
   } catch (error) { next(error); }
 };
@@ -321,7 +384,7 @@ const updateOrderStatus = async (req, res, next) => {
 // DELETE /api/v1/orders/:id
 const deleteOrder = async (req, res, next) => {
   try {
-    const order = await Order.findOne({ _id: req.params.id, isDeleted: false });
+    const order = await Order.findOne({ where: { id: req.params.id, isDeleted: false } });
     if (!order) {
       return res.status(404).json({ success: false, message: "Order not found" });
     }
@@ -334,8 +397,7 @@ const deleteOrder = async (req, res, next) => {
       });
     }
 
-    order.isDeleted = true;
-    await order.save();
+    await order.update({ isDeleted: true });
 
     res.json({ success: true, message: "Order deleted successfully" });
   } catch (error) { next(error); }
@@ -344,40 +406,61 @@ const deleteOrder = async (req, res, next) => {
 // GET /api/v1/orders/stats
 const getOrderStats = async (req, res, next) => {
   try {
-    const stats = await Order.aggregate([
-      { $match: { isDeleted: false } },
-      {
-        $group: {
-          _id: null,
-          totalOrders: { $sum: 1 },
-          totalValue: { $sum: "$grandTotal" },
-          draftOrders: { $sum: { $cond: [{ $eq: ["$status", "draft"] }, 1, 0] } },
-          confirmedOrders: { $sum: { $cond: [{ $eq: ["$status", "confirmed"] }, 1, 0] } },
-          dispatchedOrders: { $sum: { $cond: [{ $eq: ["$status", "dispatched"] }, 1, 0] } },
-          deliveredOrders: { $sum: { $cond: [{ $eq: ["$status", "delivered"] }, 1, 0] } }
-        }
-      }
-    ]);
+    const stats = await Order.findOne({
+      attributes: [
+        [sequelize.fn('COUNT', sequelize.col('id')), 'totalOrders'],
+        [sequelize.fn('SUM', sequelize.col('grandTotal')), 'totalValue'],
+        [sequelize.literal('SUM(CASE WHEN "status" = \'draft\' THEN 1 ELSE 0 END)'), 'draftOrders'],
+        [sequelize.literal('SUM(CASE WHEN "status" = \'confirmed\' THEN 1 ELSE 0 END)'), 'confirmedOrders'],
+        [sequelize.literal('SUM(CASE WHEN "status" = \'dispatched\' THEN 1 ELSE 0 END)'), 'dispatchedOrders'],
+        [sequelize.literal('SUM(CASE WHEN "status" = \'delivered\' THEN 1 ELSE 0 END)'), 'deliveredOrders'],
+      ],
+      where: { isDeleted: false },
+      raw: true
+    });
 
-    const monthlyStats = await Order.aggregate([
-      {
-        $match: {
-          isDeleted: false,
-          createdAt: { $gte: new Date(new Date().setMonth(new Date().getMonth() - 11)) }
+    const startDate = new Date();
+    startDate.setMonth(startDate.getMonth() - 11);
+    startDate.setDate(1);
+    startDate.setHours(0, 0, 0, 0);
+
+    const rawMonthlyStats = await Order.findAll({
+      attributes: [
+        [sequelize.literal('EXTRACT(MONTH FROM "createdAt")'), 'month'],
+        [sequelize.literal('EXTRACT(YEAR FROM "createdAt")'), 'year'],
+        [sequelize.fn('COUNT', sequelize.col('id')), 'count'],
+        [sequelize.fn('SUM', sequelize.col('grandTotal')), 'value']
+      ],
+      where: {
+        isDeleted: false,
+        createdAt: {
+          [Op.gte]: startDate
         }
       },
-      {
-        $group: {
-          _id: { month: { $month: "$createdAt" }, year: { $year: "$createdAt" } },
-          count: { $sum: 1 },
-          value: { $sum: "$grandTotal" }
-        }
-      },
-      { $sort: { "_id.year": 1, "_id.month": 1 } }
-    ]);
+      group: [
+        sequelize.literal('EXTRACT(YEAR FROM "createdAt")'),
+        sequelize.literal('EXTRACT(MONTH FROM "createdAt")')
+      ],
+      order: [
+        [sequelize.literal('year'), 'ASC'],
+        [sequelize.literal('month'), 'ASC']
+      ],
+      raw: true
+    });
+
+    const monthlyStats = rawMonthlyStats.map(item => ({
+      _id: { month: parseInt(item.month), year: parseInt(item.year) },
+      count: parseInt(item.count),
+      value: parseFloat(item.value || 0)
+    }));
 
     const result = {
-      ...stats[0] || { totalOrders: 0, totalValue: 0, draftOrders: 0, confirmedOrders: 0, dispatchedOrders: 0, deliveredOrders: 0 },
+      totalOrders: parseInt(stats.totalOrders || 0),
+      totalValue: parseFloat(stats.totalValue || 0),
+      draftOrders: parseInt(stats.draftOrders || 0),
+      confirmedOrders: parseInt(stats.confirmedOrders || 0),
+      dispatchedOrders: parseInt(stats.dispatchedOrders || 0),
+      deliveredOrders: parseInt(stats.deliveredOrders || 0),
       monthlyStats
     };
 

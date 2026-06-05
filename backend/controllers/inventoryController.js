@@ -1,5 +1,26 @@
-const Inventory = require("../models/Inventory");
+const { Inventory, User } = require("../models");
+const { Op } = require("sequelize");
+const { sequelize } = require("../config/database");
 const { validationResult } = require("express-validator");
+
+// Helper to format inventory response including virtual status
+const formatInventoryResponse = (itemInstance) => {
+  if (!itemInstance) return null;
+  const item = itemInstance.toJSON ? itemInstance.toJSON() : { ...itemInstance };
+  
+  if (itemInstance.getStatus) {
+    item.status = itemInstance.getStatus();
+  } else {
+    item.status = item.stockQty === 0 ? "Out of Stock" : 
+                  parseFloat(item.stockQty) <= parseFloat(item.reorderLevel) ? "Low Stock" : "In Stock";
+  }
+
+  if (item.creator) {
+    item.createdBy = item.creator;
+    delete item.creator;
+  }
+  return item;
+};
 
 // GET /api/v1/inventory
 const getInventory = async (req, res, next) => {
@@ -19,39 +40,39 @@ const getInventory = async (req, res, next) => {
 
     // Search functionality
     if (search) {
-      query.$or = [
-        { name: { $regex: search, $options: "i" } },
-        { itemCode: { $regex: search, $options: "i" } },
-        { grade: { $regex: search, $options: "i" } }
+      query[Op.or] = [
+        { name: { [Op.iLike]: `%${search}%` } },
+        { itemCode: { [Op.iLike]: `%${search}%` } },
+        { grade: { [Op.iLike]: `%${search}%` } }
       ];
     }
 
     if (type) query.pipeType = type;
 
-    const sortOptions = {};
-    sortOptions[sortBy] = sortOrder === "asc" ? 1 : -1;
+    const items = await Inventory.findAll({
+      where: query,
+      order: [[sortBy, sortOrder.toUpperCase()]],
+      offset: parseInt(skip),
+      limit: parseInt(limit),
+      include: [
+        { model: User, as: 'creator', attributes: ['name'] }
+      ]
+    });
 
-    let items = await Inventory.find(query)
-      .sort(sortOptions)
-      .skip(skip)
-      .limit(parseInt(limit))
-      .populate("createdBy", "name");
+    let formattedItems = items.map(formatInventoryResponse);
 
-    // Apply status filter after fetching (based on virtual status field)
     if (status) {
-      items = items.filter(item => {
-        const itemStatus = item.stockQty === 0 ? "Out of Stock" : 
-                          item.stockQty <= item.reorderLevel ? "Low Stock" : "In Stock";
-        return itemStatus.toLowerCase().replace(/ /g, "-") === status;
+      formattedItems = formattedItems.filter(item => {
+        return item.status.toLowerCase().replace(/ /g, "-") === status;
       });
     }
 
-    const total = await Inventory.countDocuments(query);
+    const total = await Inventory.count({ where: query });
     const totalPages = Math.ceil(total / limit);
 
     res.json({
       success: true,
-      data: items,
+      data: formattedItems,
       pagination: {
         total,
         page: parseInt(page),
@@ -66,16 +87,22 @@ const getInventory = async (req, res, next) => {
 // GET /api/v1/inventory/low-stock
 const getLowStock = async (req, res, next) => {
   try {
-    const items = await Inventory.find({ 
-      isDeleted: false,
-      $expr: { $lte: ["$stockQty", "$reorderLevel"] }
-    })
-    .sort({ stockQty: 1 })
-    .populate("createdBy", "name");
+    const items = await Inventory.findAll({
+      where: {
+        isDeleted: false,
+        stockQty: {
+          [Op.lte]: sequelize.col('reorderLevel')
+        }
+      },
+      order: [['stockQty', 'ASC']],
+      include: [
+        { model: User, as: 'creator', attributes: ['name'] }
+      ]
+    });
 
     res.json({
       success: true,
-      data: items,
+      data: items.map(formatInventoryResponse),
       message: `Found ${items.length} items with low stock`
     });
   } catch (error) { next(error); }
@@ -84,14 +111,18 @@ const getLowStock = async (req, res, next) => {
 // GET /api/v1/inventory/:id
 const getInventoryItem = async (req, res, next) => {
   try {
-    const item = await Inventory.findOne({ _id: req.params.id, isDeleted: false })
-      .populate("createdBy", "name email");
+    const item = await Inventory.findOne({
+      where: { id: req.params.id, isDeleted: false },
+      include: [
+        { model: User, as: 'creator', attributes: ['name', 'email'] }
+      ]
+    });
     
     if (!item) {
       return res.status(404).json({ success: false, message: "Inventory item not found" });
     }
 
-    res.json({ success: true, data: item });
+    res.json({ success: true, data: formatInventoryResponse(item) });
   } catch (error) { next(error); }
 };
 
@@ -107,18 +138,23 @@ const createInventoryItem = async (req, res, next) => {
       });
     }
 
-    const item = new Inventory({
+    const itemData = {
       ...req.body,
-      createdBy: req.user._id
-    });
+      createdBy: req.user.id
+    };
 
-    await item.save();
-    await item.populate("createdBy", "name");
+    const item = await Inventory.create(itemData);
+
+    const savedItem = await Inventory.findByPk(item.id, {
+      include: [
+        { model: User, as: 'creator', attributes: ['name'] }
+      ]
+    });
 
     res.status(201).json({
       success: true,
       message: "Inventory item created successfully",
-      data: item
+      data: formatInventoryResponse(savedItem)
     });
   } catch (error) { next(error); }
 };
@@ -135,20 +171,26 @@ const updateInventoryItem = async (req, res, next) => {
       });
     }
 
-    const item = await Inventory.findOneAndUpdate(
-      { _id: req.params.id, isDeleted: false },
-      req.body,
-      { new: true, runValidators: true }
-    ).populate("createdBy", "name");
+    const item = await Inventory.findOne({
+      where: { id: req.params.id, isDeleted: false }
+    });
 
     if (!item) {
       return res.status(404).json({ success: false, message: "Inventory item not found" });
     }
 
+    await item.update(req.body);
+
+    const updatedItem = await Inventory.findByPk(item.id, {
+      include: [
+        { model: User, as: 'creator', attributes: ['name'] }
+      ]
+    });
+
     res.json({
       success: true,
       message: "Inventory item updated successfully",
-      data: item
+      data: formatInventoryResponse(updatedItem)
     });
   } catch (error) { next(error); }
 };
@@ -156,15 +198,15 @@ const updateInventoryItem = async (req, res, next) => {
 // DELETE /api/v1/inventory/:id
 const deleteInventoryItem = async (req, res, next) => {
   try {
-    const item = await Inventory.findOneAndUpdate(
-      { _id: req.params.id, isDeleted: false },
-      { isDeleted: true },
-      { new: true }
-    );
+    const item = await Inventory.findOne({
+      where: { id: req.params.id, isDeleted: false }
+    });
 
     if (!item) {
       return res.status(404).json({ success: false, message: "Inventory item not found" });
     }
+
+    await item.update({ isDeleted: true });
 
     res.json({ 
       success: true, 

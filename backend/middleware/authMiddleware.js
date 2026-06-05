@@ -11,7 +11,9 @@ const protect = async (req, res, next) => {
     const token = authHeader.split(" ")[1];
     const decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
 
-    const user = await User.findById(decoded.id).select("-password -refreshToken");
+    const user = await User.findByPk(decoded.id, {
+      attributes: { exclude: ["password", "refreshToken"] }
+    });
     if (!user || !user.isActive) {
       return res.status(401).json({ success: false, message: "User not found or deactivated" });
     }

@@ -1,28 +1,20 @@
 require("dotenv").config();
-const mongoose = require("mongoose");
+const { sequelize } = require("./config/database");
 
-console.log("Testing MongoDB Connection...");
-console.log("Connection string format:", process.env.MONGODB_URI ? "✓ Found" : "✗ Missing");
+console.log("Testing PostgreSQL Connection...");
+console.log("Database Host:", process.env.DB_HOST || "localhost");
+console.log("Database Name:", process.env.DB_NAME || "steeltrack_erp");
 
-if (process.env.MONGODB_URI) {
-  // Hide password for security
-  const masked = process.env.MONGODB_URI.replace(/:[^:@]+@/, ":****@");
-  console.log("Masked URI:", masked);
-}
-
-mongoose.connect(process.env.MONGODB_URI)
-  .then((conn) => {
-    console.log("✅ MongoDB Connected Successfully!");
-    console.log("Host:", conn.connection.host);
-    console.log("Database:", conn.connection.name);
+sequelize.authenticate()
+  .then(() => {
+    console.log("✅ PostgreSQL Connected Successfully!");
     process.exit(0);
   })
   .catch((error) => {
     console.error("❌ Connection Error:", error.message);
     console.error("\nTroubleshooting tips:");
-    console.error("1. Verify your MongoDB Atlas connection string");
-    console.error("2. Check Network Access allows your IP (0.0.0.0/0)");
-    console.error("3. Verify database user exists and password is correct");
-    console.error("4. If password has special characters, URL encode them");
+    console.error("1. Verify your PostgreSQL service is running");
+    console.error("2. Check the DB_USER and DB_PASSWORD in .env");
+    console.error("3. Verify the database exists");
     process.exit(1);
   });

@@ -10,7 +10,7 @@ const login = async (req, res, next) => {
     if (!email || !password)
       return res.status(400).json({ success: false, message: "Email and password are required" });
 
-    const user = await User.findOne({ email: email.toLowerCase() }).select("+password");
+    const user = await User.findOne({ where: { email: email.toLowerCase() } });
     if (!user || !user.isActive)
       return res.status(401).json({ success: false, message: "Invalid email or password" });
 
@@ -18,8 +18,8 @@ const login = async (req, res, next) => {
     if (!isMatch)
       return res.status(401).json({ success: false, message: "Invalid email or password" });
 
-    const accessToken  = generateAccessToken(user._id, user.role);
-    const refreshToken = generateRefreshToken(user._id);
+    const accessToken  = generateAccessToken(user.id, user.role);
+    const refreshToken = generateRefreshToken(user.id);
 
     // Save hashed refresh token
     user.refreshToken = refreshToken;
@@ -33,7 +33,7 @@ const login = async (req, res, next) => {
       message: "Login successful",
       data: {
         accessToken,
-        user: { id: user._id, name: user.name, email: user.email, role: user.role },
+        user: { id: user.id, name: user.name, email: user.email, role: user.role },
       },
     });
   } catch (error) { next(error); }
@@ -47,13 +47,13 @@ const refreshToken = async (req, res, next) => {
       return res.status(401).json({ success: false, message: "No refresh token" });
 
     const decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET);
-    const user    = await User.findById(decoded.id).select("+refreshToken");
+    const user    = await User.findByPk(decoded.id);
 
     if (!user || user.refreshToken !== token)
       return res.status(401).json({ success: false, message: "Invalid refresh token" });
 
-    const accessToken     = generateAccessToken(user._id, user.role);
-    const newRefreshToken = generateRefreshToken(user._id);
+    const accessToken     = generateAccessToken(user.id, user.role);
+    const newRefreshToken = generateRefreshToken(user.id);
 
     user.refreshToken = newRefreshToken;
     await user.save({ validateBeforeSave: false });
@@ -64,7 +64,7 @@ const refreshToken = async (req, res, next) => {
       success: true,
       data: {
         accessToken,
-        user: { id: user._id, name: user.name, email: user.email, role: user.role },
+        user: { id: user.id, name: user.name, email: user.email, role: user.role },
       },
     });
   } catch (error) {
@@ -80,10 +80,9 @@ const logout = async (req, res, next) => {
   try {
     const token = req.cookies?.refreshToken;
     if (token) {
-      await User.findOneAndUpdate(
-        { refreshToken: token },
+      await User.update(
         { refreshToken: null },
-        { validateBeforeSave: false }
+        { where: { refreshToken: token } }
       );
     }
     res.clearCookie("refreshToken");

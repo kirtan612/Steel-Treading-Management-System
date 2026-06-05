@@ -1,29 +1,16 @@
 require("dotenv").config();
-const mongoose = require("mongoose");
+const { sequelize, connectDB } = require("./config/database");
 const User = require("./models/User");
 const Customer = require("./models/Customer");
 const Inventory = require("./models/Inventory");
-
-const connectDB = async () => {
-  try {
-    await mongoose.connect(process.env.MONGODB_URI);
-    console.log("🟢 MongoDB Connected for seeding");
-  } catch (error) {
-    console.error("❌ MongoDB connection error:", error);
-    process.exit(1);
-  }
-};
 
 const seedDatabase = async () => {
   try {
     await connectDB();
     
     console.log("🗑️  Clearing existing data...");
-    await Promise.all([
-      User.deleteMany({}),
-      Customer.deleteMany({}),
-      Inventory.deleteMany({})
-    ]);
+    // Truncate tables and restart identity columns
+    await sequelize.query('TRUNCATE TABLE "invoices", "orders", "customers", "inventory", "users" RESTART IDENTITY CASCADE;');
     console.log("✅ Database cleared");
 
     // Create users
@@ -42,11 +29,14 @@ const seedDatabase = async () => {
       }
     ];
 
+    const createdUsers = [];
     for (const userData of users) {
-      const user = new User(userData);
-      await user.save();
+      const user = await User.create(userData);
+      createdUsers.push(user);
       console.log(`✅ Created user: ${userData.email}`);
     }
+
+    const adminUser = createdUsers.find(u => u.role === "admin");
 
     // Create inventory items
     const inventoryItems = [
@@ -59,7 +49,8 @@ const seedDatabase = async () => {
         stockQty: 500,
         reorderLevel: 100,
         purchasePrice: 52,
-        sellingPrice: 58
+        sellingPrice: 58,
+        createdBy: adminUser.id
       },
       {
         name: '3" ERW Pipe IS 1239',
@@ -70,7 +61,8 @@ const seedDatabase = async () => {
         stockQty: 25,  // Low stock
         reorderLevel: 50,
         purchasePrice: 75,
-        sellingPrice: 82
+        sellingPrice: 82,
+        createdBy: adminUser.id
       },
       {
         name: '1" GI Pipe IS 1239',
@@ -81,7 +73,8 @@ const seedDatabase = async () => {
         stockQty: 800,
         reorderLevel: 200,
         purchasePrice: 68,
-        sellingPrice: 76
+        sellingPrice: 76,
+        createdBy: adminUser.id
       },
       {
         name: '4" Seamless ASTM A53',
@@ -92,7 +85,8 @@ const seedDatabase = async () => {
         stockQty: 15,  // Low stock
         reorderLevel: 25,
         purchasePrice: 85,
-        sellingPrice: 95
+        sellingPrice: 95,
+        createdBy: adminUser.id
       },
       {
         name: '50x50 Hollow Section',
@@ -103,7 +97,8 @@ const seedDatabase = async () => {
         stockQty: 0,  // Out of stock
         reorderLevel: 100,
         purchasePrice: 35,
-        sellingPrice: 42
+        sellingPrice: 42,
+        createdBy: adminUser.id
       },
       {
         name: '4" ERW IS 3589',
@@ -114,7 +109,8 @@ const seedDatabase = async () => {
         stockQty: 300,
         reorderLevel: 50,
         purchasePrice: 78,
-        sellingPrice: 85
+        sellingPrice: 85,
+        createdBy: adminUser.id
       },
       {
         name: '1/2" GI Pipe IS 1239',
@@ -125,7 +121,8 @@ const seedDatabase = async () => {
         stockQty: 1200,
         reorderLevel: 300,
         purchasePrice: 45,
-        sellingPrice: 52
+        sellingPrice: 52,
+        createdBy: adminUser.id
       },
       {
         name: '25x25 Hollow Section',
@@ -136,83 +133,77 @@ const seedDatabase = async () => {
         stockQty: 500,
         reorderLevel: 150,
         purchasePrice: 25,
-        sellingPrice: 30
+        sellingPrice: 30,
+        createdBy: adminUser.id
       }
     ];
 
     for (const item of inventoryItems) {
-      const inventoryItem = new Inventory(item);
-      await inventoryItem.save();
+      await Inventory.create(item);
       console.log(`✅ Created inventory: ${item.name}`);
     }
 
-    // Create customers
+    // Create customers (with flattened address columns)
     const customers = [
       {
         name: "Rajesh Patel",
         company: "Patel Steel Works",
         phone: "9876543210",
         customerType: "Wholesale",
-        billingAddress: {
-          street: "Plot 15, Industrial Estate",
-          city: "Ahmedabad",
-          state: "Gujarat",
-          pincode: "380015"
-        },
-        gstNumber: "24ABCDE1234F1Z5"
+        billingStreet: "Plot 15, Industrial Estate",
+        billingCity: "Ahmedabad",
+        billingState: "Gujarat",
+        billingPincode: "380015",
+        gstNumber: "24ABCDE1234F1Z5",
+        createdBy: adminUser.id
       },
       {
         name: "Mumbai Industries",
         phone: "9123456789",
         customerType: "Industrial",
-        billingAddress: {
-          street: "Unit 23, GIDC",
-          city: "Surat",
-          state: "Gujarat",
-          pincode: "395003"
-        },
-        gstNumber: "24FGHIJ5678K1Z9"
+        billingStreet: "Unit 23, GIDC",
+        billingCity: "Surat",
+        billingState: "Gujarat",
+        billingPincode: "395003",
+        gstNumber: "24FGHIJ5678K1Z9",
+        createdBy: adminUser.id
       },
       {
         name: "Vadodara Construction",
         phone: "9988776655",
         customerType: "Contractor",
-        billingAddress: {
-          street: "Near Railway Station",
-          city: "Vadodara",
-          state: "Gujarat",
-          pincode: "390001"
-        },
-        gstNumber: "24KLMNO9012P1Z3"
+        billingStreet: "Near Railway Station",
+        billingCity: "Vadodara",
+        billingState: "Gujarat",
+        billingPincode: "390001",
+        gstNumber: "24KLMNO9012P1Z3",
+        createdBy: adminUser.id
       },
       {
         name: "Rajkot Traders",
         phone: "9556677889",
         customerType: "Retail",
-        billingAddress: {
-          street: "Main Market Road",
-          city: "Rajkot",
-          state: "Gujarat",
-          pincode: "360001"
-        }
+        billingStreet: "Main Market Road",
+        billingCity: "Rajkot",
+        billingState: "Gujarat",
+        billingPincode: "360001",
+        createdBy: adminUser.id
       },
       {
         name: "Gandhinagar Pipes",
         phone: "9445566778",
         customerType: "Wholesale",
-        billingAddress: {
-          street: "Sector 12",
-          city: "Gandhinagar",
-          state: "Gujarat",
-          pincode: "382012"
-        },
-        gstNumber: "24PQRST3456U1Z7"
+        billingStreet: "Sector 12",
+        billingCity: "Gandhinagar",
+        billingState: "Gujarat",
+        billingPincode: "382012",
+        gstNumber: "24PQRST3456U1Z7",
+        createdBy: adminUser.id
       }
     ];
 
     for (const customerData of customers) {
-      const customer = new Customer(customerData);
-      await customer.save();
+      await Customer.create(customerData);
       console.log(`✅ Created customer: ${customerData.name}`);
     }
 
@@ -224,7 +215,7 @@ const seedDatabase = async () => {
   } catch (error) {
     console.error("❌ Seeding error:", error);
   } finally {
-    mongoose.connection.close();
+    await sequelize.close();
     console.log("🔌 Database connection closed");
   }
 };

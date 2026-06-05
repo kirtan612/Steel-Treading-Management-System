@@ -1,12 +1,15 @@
+const { Op } = require("sequelize");
 const Order   = require("../models/Order");
 const Invoice = require("../models/Invoice");
 
 const generateOrderNumber = async () => {
   const year = new Date().getFullYear();
-  const count = await Order.countDocuments({
-    createdAt: {
-      $gte: new Date(`${year}-01-01`),
-      $lt:  new Date(`${year + 1}-01-01`),
+  const count = await Order.count({
+    where: {
+      createdAt: {
+        [Op.gte]: new Date(`${year}-01-01`),
+        [Op.lt]:  new Date(`${year + 1}-01-01`),
+      },
     },
   });
   const seq = String(count + 1).padStart(4, "0");
@@ -15,10 +18,12 @@ const generateOrderNumber = async () => {
 
 const generateInvoiceNumber = async () => {
   const year = new Date().getFullYear();
-  const count = await Invoice.countDocuments({
-    createdAt: {
-      $gte: new Date(`${year}-01-01`),
-      $lt:  new Date(`${year + 1}-01-01`),
+  const count = await Invoice.count({
+    where: {
+      createdAt: {
+        [Op.gte]: new Date(`${year}-01-01`),
+        [Op.lt]:  new Date(`${year + 1}-01-01`),
+      },
     },
   });
   const seq = String(count + 1).padStart(4, "0");
