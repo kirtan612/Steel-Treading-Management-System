@@ -2,13 +2,13 @@ const Inventory = require("../models/Inventory");
 const { validationResult } = require("express-validator");
 
 // GET /api/v1/inventory
-const getAllInventory = async (req, res, next) => {
+const getInventory = async (req, res, next) => {
   try {
     const {
       page = 1,
       limit = 20,
       search = "",
-      pipeType = "",
+      type = "",
       status = "",
       sortBy = "createdAt",
       sortOrder = "desc"
@@ -26,41 +26,63 @@ const getAllInventory = async (req, res, next) => {
       ];
     }
 
-    if (pipeType) query.pipeType = pipeType;
-
-    // Status filter
-    if (status === "out-of-stock") query.stockQty = 0;
-    else if (status === "low-stock") query.$expr = { $lte: ["$stockQty", "$reorderLevel"] };
+    if (type) query.pipeType = type;
 
     const sortOptions = {};
     sortOptions[sortBy] = sortOrder === "asc" ? 1 : -1;
 
-    const items = await Inventory.find(query)
+    let items = await Inventory.find(query)
       .sort(sortOptions)
       .skip(skip)
       .limit(parseInt(limit))
       .populate("createdBy", "name");
 
+    // Apply status filter after fetching (based on virtual status field)
+    if (status) {
+      items = items.filter(item => {
+        const itemStatus = item.stockQty === 0 ? "Out of Stock" : 
+                          item.stockQty <= item.reorderLevel ? "Low Stock" : "In Stock";
+        return itemStatus.toLowerCase().replace(/ /g, "-") === status;
+      });
+    }
+
     const total = await Inventory.countDocuments(query);
+    const totalPages = Math.ceil(total / limit);
 
     res.json({
       success: true,
-      data: {
-        items,
-        pagination: {
-          currentPage: parseInt(page),
-          totalPages: Math.ceil(total / limit),
-          totalItems: total,
-          hasNext: skip + items.length < total,
-          hasPrev: page > 1
-        }
+      data: items,
+      pagination: {
+        total,
+        page: parseInt(page),
+        totalPages,
+        hasNext: page < totalPages,
+        hasPrev: page > 1
       }
     });
   } catch (error) { next(error); }
 };
 
+// GET /api/v1/inventory/low-stock
+const getLowStock = async (req, res, next) => {
+  try {
+    const items = await Inventory.find({ 
+      isDeleted: false,
+      $expr: { $lte: ["$stockQty", "$reorderLevel"] }
+    })
+    .sort({ stockQty: 1 })
+    .populate("createdBy", "name");
+
+    res.json({
+      success: true,
+      data: items,
+      message: `Found ${items.length} items with low stock`
+    });
+  } catch (error) { next(error); }
+};
+
 // GET /api/v1/inventory/:id
-const getInventoryById = async (req, res, next) => {
+const getInventoryItem = async (req, res, next) => {
   try {
     const item = await Inventory.findOne({ _id: req.params.id, isDeleted: false })
       .populate("createdBy", "name email");
@@ -74,16 +96,20 @@ const getInventoryById = async (req, res, next) => {
 };
 
 // POST /api/v1/inventory
-const createInventory = async (req, res, next) => {
+const createInventoryItem = async (req, res, next) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ success: false, message: "Validation failed", errors: errors.array() });
+      return res.status(400).json({ 
+        success: false, 
+        message: "Validation failed", 
+        errors: errors.array() 
+      });
     }
 
     const item = new Inventory({
       ...req.body,
-      createdBy: req.user.id
+      createdBy: req.user._id
     });
 
     await item.save();
@@ -94,20 +120,19 @@ const createInventory = async (req, res, next) => {
       message: "Inventory item created successfully",
       data: item
     });
-  } catch (error) {
-    if (error.code === 11000) {
-      return res.status(400).json({ success: false, message: "Item code already exists" });
-    }
-    next(error);
-  }
+  } catch (error) { next(error); }
 };
 
 // PUT /api/v1/inventory/:id
-const updateInventory = async (req, res, next) => {
+const updateInventoryItem = async (req, res, next) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ success: false, message: "Validation failed", errors: errors.array() });
+      return res.status(400).json({ 
+        success: false, 
+        message: "Validation failed", 
+        errors: errors.array() 
+      });
     }
 
     const item = await Inventory.findOneAndUpdate(
@@ -125,16 +150,11 @@ const updateInventory = async (req, res, next) => {
       message: "Inventory item updated successfully",
       data: item
     });
-  } catch (error) {
-    if (error.code === 11000) {
-      return res.status(400).json({ success: false, message: "Item code already exists" });
-    }
-    next(error);
-  }
+  } catch (error) { next(error); }
 };
 
 // DELETE /api/v1/inventory/:id
-const deleteInventory = async (req, res, next) => {
+const deleteInventoryItem = async (req, res, next) => {
   try {
     const item = await Inventory.findOneAndUpdate(
       { _id: req.params.id, isDeleted: false },
@@ -146,77 +166,18 @@ const deleteInventory = async (req, res, next) => {
       return res.status(404).json({ success: false, message: "Inventory item not found" });
     }
 
-    res.json({ success: true, message: "Inventory item deleted successfully" });
-  } catch (error) { next(error); }
-};
-
-// PATCH /api/v1/inventory/:id/stock
-const updateStock = async (req, res, next) => {
-  try {
-    const { quantity, operation = "set" } = req.body;
-
-    if (typeof quantity !== "number" || quantity < 0) {
-      return res.status(400).json({ success: false, message: "Valid quantity is required" });
-    }
-
-    const item = await Inventory.findOne({ _id: req.params.id, isDeleted: false });
-    if (!item) {
-      return res.status(404).json({ success: false, message: "Inventory item not found" });
-    }
-
-    let newStock;
-    if (operation === "add") newStock = item.stockQty + quantity;
-    else if (operation === "subtract") newStock = Math.max(0, item.stockQty - quantity);
-    else newStock = quantity;
-
-    item.stockQty = newStock;
-    await item.save();
-
-    res.json({
-      success: true,
-      message: "Stock updated successfully",
-      data: { itemCode: item.itemCode, newStock, previousStock: item.stockQty }
+    res.json({ 
+      success: true, 
+      message: "Inventory item deleted successfully" 
     });
   } catch (error) { next(error); }
 };
 
-// GET /api/v1/inventory/stats
-const getInventoryStats = async (req, res, next) => {
-  try {
-    const stats = await Inventory.aggregate([
-      { $match: { isDeleted: false } },
-      {
-        $group: {
-          _id: null,
-          totalItems: { $sum: 1 },
-          totalValue: { $sum: { $multiply: ["$stockQty", "$sellingPrice"] } },
-          lowStockItems: {
-            $sum: { $cond: [{ $lte: ["$stockQty", "$reorderLevel"] }, 1, 0] }
-          },
-          outOfStockItems: {
-            $sum: { $cond: [{ $eq: ["$stockQty", 0] }, 1, 0] }
-          }
-        }
-      }
-    ]);
-
-    const result = stats[0] || {
-      totalItems: 0,
-      totalValue: 0,
-      lowStockItems: 0,
-      outOfStockItems: 0
-    };
-
-    res.json({ success: true, data: result });
-  } catch (error) { next(error); }
-};
-
 module.exports = {
-  getAllInventory,
-  getInventoryById,
-  createInventory,
-  updateInventory,
-  deleteInventory,
-  updateStock,
-  getInventoryStats
+  getInventory,
+  getLowStock,
+  getInventoryItem,
+  createInventoryItem,
+  updateInventoryItem,
+  deleteInventoryItem
 };

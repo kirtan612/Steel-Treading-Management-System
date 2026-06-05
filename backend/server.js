@@ -5,8 +5,11 @@ const helmet = require("helmet");
 const morgan = require("morgan");
 const cookieParser = require("cookie-parser");
 const rateLimit = require("express-rate-limit");
-const connectDB = require("./config/db");
+const { connectDB } = require("./config/database");
 const errorHandler = require("./middleware/errorHandler");
+
+// Import models to register associations
+require('./models');
 
 // Route imports
 const authRoutes      = require("./routes/authRoutes");
@@ -16,7 +19,7 @@ const orderRoutes     = require("./routes/orderRoutes");
 const invoiceRoutes   = require("./routes/invoiceRoutes");
 const reportRoutes    = require("./routes/reportRoutes");
 
-// Connect to MongoDB
+// Connect to PostgreSQL
 connectDB();
 
 const app = express();
@@ -70,7 +73,7 @@ app.use("/api/v1/invoices",  generalLimiter, invoiceRoutes);
 app.use("/api/v1/reports",   generalLimiter, reportRoutes);
 
 // 404 handler
-app.use("*", (req, res) => {
+app.use((req, res) => {
   res.status(404).json({ success: false, message: `Route ${req.originalUrl} not found` });
 });
 

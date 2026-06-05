@@ -1,57 +1,159 @@
-const mongoose = require("mongoose");
+const { DataTypes } = require('sequelize');
+const { sequelize } = require('../config/database');
 
-const addressSchema = new mongoose.Schema({
-  street:  { type: String, trim: true },
-  city:    { type: String, trim: true },
-  state:   { type: String, trim: true },
-  pincode: { type: String, trim: true, match: [/^[1-9][0-9]{5}$/, "Invalid pincode"] },
-}, { _id: false });
-
-const customerSchema = new mongoose.Schema({
-  customerCode: { type: String, unique: true, sparse: true },
-  name:         { type: String, required: [true, "Customer name is required"], trim: true },
-  company:      { type: String, trim: true },
+const Customer = sequelize.define('Customer', {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true
+  },
+  customerCode: {
+    type: DataTypes.STRING(50),
+    unique: true,
+    allowNull: true
+  },
+  name: {
+    type: DataTypes.STRING(100),
+    allowNull: false,
+    validate: {
+      notEmpty: true
+    }
+  },
+  company: {
+    type: DataTypes.STRING(200),
+    allowNull: true
+  },
   phone: {
-    type: String, required: [true, "Phone is required"],
-    match: [/^[6-9]\d{9}$/, "Enter a valid 10-digit Indian mobile number"],
+    type: DataTypes.STRING(15),
+    allowNull: false,
+    validate: {
+      is: /^[6-9]\d{9}$/
+    }
   },
-  alternatePhone: { type: String },
-  email:          { type: String, lowercase: true, trim: true },
-  billingAddress:  addressSchema,
-  shippingAddress: addressSchema,
-  sameAsBilling:   { type: Boolean, default: true },
+  alternatePhone: {
+    type: DataTypes.STRING(15),
+    allowNull: true
+  },
+  email: {
+    type: DataTypes.STRING(255),
+    allowNull: true,
+    validate: {
+      isEmail: true
+    },
+    set(value) {
+      if (value) {
+        this.setDataValue('email', value.toLowerCase().trim());
+      }
+    }
+  },
+  // Billing Address
+  billingStreet: {
+    type: DataTypes.STRING(255),
+    allowNull: true
+  },
+  billingCity: {
+    type: DataTypes.STRING(100),
+    allowNull: true
+  },
+  billingState: {
+    type: DataTypes.STRING(100),
+    allowNull: true
+  },
+  billingPincode: {
+    type: DataTypes.STRING(6),
+    allowNull: true,
+    validate: {
+      is: /^[1-9][0-9]{5}$/
+    }
+  },
+  // Shipping Address
+  shippingStreet: {
+    type: DataTypes.STRING(255),
+    allowNull: true
+  },
+  shippingCity: {
+    type: DataTypes.STRING(100),
+    allowNull: true
+  },
+  shippingState: {
+    type: DataTypes.STRING(100),
+    allowNull: true
+  },
+  shippingPincode: {
+    type: DataTypes.STRING(6),
+    allowNull: true
+  },
+  sameAsBilling: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: true
+  },
   gstNumber: {
-    type: String, trim: true, uppercase: true,
-    match: [
-      /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/,
-      "Invalid GST number format",
-    ],
+    type: DataTypes.STRING(15),
+    allowNull: true,
+    validate: {
+      is: /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/
+    },
+    set(value) {
+      if (value) {
+        this.setDataValue('gstNumber', value.toUpperCase().trim());
+      }
+    }
   },
-  panNumber:    { type: String, trim: true, uppercase: true },
+  panNumber: {
+    type: DataTypes.STRING(10),
+    allowNull: true,
+    set(value) {
+      if (value) {
+        this.setDataValue('panNumber', value.toUpperCase().trim());
+      }
+    }
+  },
   customerType: {
-    type: String, enum: ["Retail", "Wholesale", "Contractor", "Industrial"],
-    default: "Retail",
+    type: DataTypes.ENUM('Retail', 'Wholesale', 'Contractor', 'Industrial'),
+    defaultValue: 'Retail'
   },
-  creditLimit:   { type: Number, default: 0, min: 0 },
-  paymentTerms:  {
-    type: String,
-    enum: ["Immediate", "15 days", "30 days", "45 days"], default: "30 days",
+  creditLimit: {
+    type: DataTypes.DECIMAL(12, 2),
+    defaultValue: 0,
+    validate: {
+      min: 0
+    }
   },
-  notes:     { type: String, trim: true },
-  isActive:  { type: Boolean, default: true },
-  isDeleted: { type: Boolean, default: false },
-  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-}, { timestamps: true });
-
-customerSchema.pre("save", async function (next) {
-  if (!this.customerCode) {
-    const count = await mongoose.model("Customer").countDocuments();
-    this.customerCode = `CUST-${String(count + 1).padStart(4, "0")}`;
+  paymentTerms: {
+    type: DataTypes.ENUM('Immediate', '15 days', '30 days', '45 days'),
+    defaultValue: '30 days'
+  },
+  notes: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  isActive: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: true
+  },
+  isDeleted: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
+  createdBy: {
+    type: DataTypes.UUID,
+    allowNull: true,
+    references: {
+      model: 'users',
+      key: 'id'
+    }
   }
-  next();
+}, {
+  tableName: 'customers',
+  timestamps: true,
+  hooks: {
+    beforeCreate: async (customer) => {
+      if (!customer.customerCode) {
+        const count = await Customer.count();
+        customer.customerCode = `CUST-${String(count + 1).padStart(4, '0')}`;
+      }
+    }
+  }
 });
 
-customerSchema.index({ name: "text", company: "text", phone: "text" });
-customerSchema.index({ isDeleted: 1 });
-
-module.exports = mongoose.model("Customer", customerSchema);
+module.exports = Customer;

@@ -1,65 +1,128 @@
-const mongoose = require("mongoose");
+const { DataTypes } = require('sequelize');
+const { sequelize } = require('../config/database');
 
-const paymentSchema = new mongoose.Schema({
-  amount:      { type: Number, required: true, min: 0.01 },
-  paymentDate: { type: Date, default: Date.now },
-  mode: {
-    type: String,
-    enum: ["Cash", "Cheque", "NEFT", "RTGS", "UPI"], default: "NEFT",
+const Invoice = sequelize.define('Invoice', {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true
   },
-  reference:  { type: String, trim: true },
-  notes:      { type: String, trim: true },
-  recordedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-  recordedAt: { type: Date, default: Date.now },
-}, { _id: true });
-
-const invoiceSchema = new mongoose.Schema({
-  invoiceNumber: { type: String, unique: true },
-  order:         { type: mongoose.Schema.Types.ObjectId, ref: "Order", required: true },
-  customer:      { type: mongoose.Schema.Types.ObjectId, ref: "Customer", required: true },
-
-  issueDate:  { type: Date, default: Date.now },
-  dueDate:    { type: Date, required: true },
-
-  items:          { type: Array, required: true },
-  subtotal:       { type: Number, required: true },
-  discountAmount: { type: Number, default: 0 },
-  taxableAmount:  { type: Number, required: true },
-  cgst:           { type: Number, default: 0 },
-  sgst:           { type: Number, default: 0 },
-  igst:           { type: Number, default: 0 },
-  totalTax:       { type: Number, default: 0 },
-  grandTotal:     { type: Number, required: true },
-  amountPaid:     { type: Number, default: 0 },
-
+  invoiceNumber: {
+    type: DataTypes.STRING(50),
+    unique: true,
+    allowNull: false
+  },
+  orderId: {
+    type: DataTypes.UUID,
+    allowNull: false,
+    references: {
+      model: 'orders',
+      key: 'id'
+    }
+  },
+  customerId: {
+    type: DataTypes.UUID,
+    allowNull: false,
+    references: {
+      model: 'customers',
+      key: 'id'
+    }
+  },
+  issueDate: {
+    type: DataTypes.DATE,
+    defaultValue: DataTypes.NOW
+  },
+  dueDate: {
+    type: DataTypes.DATE,
+    allowNull: false
+  },
+  items: {
+    type: DataTypes.JSONB,
+    allowNull: false
+  },
+  subtotal: {
+    type: DataTypes.DECIMAL(12, 2),
+    allowNull: false
+  },
+  discountAmount: {
+    type: DataTypes.DECIMAL(12, 2),
+    defaultValue: 0
+  },
+  taxableAmount: {
+    type: DataTypes.DECIMAL(12, 2),
+    allowNull: false
+  },
+  cgst: {
+    type: DataTypes.DECIMAL(12, 2),
+    defaultValue: 0
+  },
+  sgst: {
+    type: DataTypes.DECIMAL(12, 2),
+    defaultValue: 0
+  },
+  igst: {
+    type: DataTypes.DECIMAL(12, 2),
+    defaultValue: 0
+  },
+  totalTax: {
+    type: DataTypes.DECIMAL(12, 2),
+    defaultValue: 0
+  },
+  grandTotal: {
+    type: DataTypes.DECIMAL(12, 2),
+    allowNull: false
+  },
+  amountPaid: {
+    type: DataTypes.DECIMAL(12, 2),
+    defaultValue: 0
+  },
   status: {
-    type: String,
-    enum: ["unpaid", "partial", "paid", "overdue"], default: "unpaid",
+    type: DataTypes.ENUM('unpaid', 'partial', 'paid', 'overdue'),
+    defaultValue: 'unpaid'
   },
-  payments:          { type: [paymentSchema], default: [] },
-  notes:             { type: String },
-  termsAndConditions:{ type: String },
-  createdBy:         { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-}, { timestamps: true });
+  payments: {
+    type: DataTypes.JSONB,
+    defaultValue: []
+  },
+  notes: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  termsAndConditions: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  createdBy: {
+    type: DataTypes.UUID,
+    allowNull: true,
+    references: {
+      model: 'users',
+      key: 'id'
+    }
+  }
+}, {
+  tableName: 'invoices',
+  timestamps: true,
+  hooks: {
+    beforeSave: (invoice) => {
+      // Auto-update status based on payment
+      const paid = parseFloat(invoice.amountPaid);
+      const total = parseFloat(invoice.grandTotal);
+      
+      if (paid <= 0) {
+        invoice.status = 'unpaid';
+      } else if (paid >= total) {
+        invoice.status = 'paid';
+      } else {
+        invoice.status = 'partial';
+      }
+    }
+  }
+});
 
-// Virtual: balance
-invoiceSchema.virtual("balance").get(function () {
+// Virtual field for balance
+Invoice.prototype.getBalance = function() {
   return parseFloat((this.grandTotal - this.amountPaid).toFixed(2));
-});
+};
 
-// Auto-update status based on payment
-invoiceSchema.pre("save", function (next) {
-  if (this.amountPaid <= 0)             this.status = "unpaid";
-  else if (this.amountPaid >= this.grandTotal) this.status = "paid";
-  else                                  this.status = "partial";
-  next();
-});
-
-invoiceSchema.set("toJSON",   { virtuals: true });
-invoiceSchema.set("toObject", { virtuals: true });
-
-invoiceSchema.index({ customer: 1, createdAt: -1 });
-invoiceSchema.index({ status: 1 });
-invoiceSchema.index({ dueDate: 1, status: 1 });
-
-module.exports = mongoose.model("Invoice", invoiceSchema);
+module.exports = Invoice;

@@ -1,12 +1,11 @@
 const router = require("express").Router();
 const {
-  getAllInventory,
-  getInventoryById,
-  createInventory,
-  updateInventory,
-  deleteInventory,
-  updateStock,
-  getInventoryStats
+  getInventory,
+  getLowStock,
+  getInventoryItem,
+  createInventoryItem,
+  updateInventoryItem,
+  deleteInventoryItem
 } = require("../controllers/inventoryController");
 const { protect } = require("../middleware/authMiddleware");
 const { authorize } = require("../middleware/roleMiddleware");
@@ -28,25 +27,22 @@ const inventoryValidation = [
 // All routes require authentication
 router.use(protect);
 
-// GET /api/v1/inventory/stats
-router.get("/stats", getInventoryStats);
+// GET /api/v1/inventory/low-stock (must be before /:id route)
+router.get("/low-stock", getLowStock);
 
 // GET /api/v1/inventory
-router.get("/", getAllInventory);
+router.get("/", getInventory);
 
 // GET /api/v1/inventory/:id
-router.get("/:id", getInventoryById);
+router.get("/:id", getInventoryItem);
 
 // POST /api/v1/inventory
-router.post("/", authorize("admin", "sales"), inventoryValidation, createInventory);
+router.post("/", authorize("admin", "sales"), inventoryValidation, createInventoryItem);
 
 // PUT /api/v1/inventory/:id
-router.put("/:id", authorize("admin", "sales"), inventoryValidation, updateInventory);
-
-// PATCH /api/v1/inventory/:id/stock
-router.patch("/:id/stock", authorize("admin", "sales"), updateStock);
+router.put("/:id", authorize("admin", "sales"), inventoryValidation, updateInventoryItem);
 
 // DELETE /api/v1/inventory/:id
-router.delete("/:id", authorize("admin"), deleteInventory);
+router.delete("/:id", authorize("admin"), deleteInventoryItem);
 
 module.exports = router;

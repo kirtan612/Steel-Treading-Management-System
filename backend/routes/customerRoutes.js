@@ -1,12 +1,10 @@
 const router = require("express").Router();
 const {
-  getAllCustomers,
-  getCustomerById,
+  getCustomers,
+  getCustomer,
   createCustomer,
   updateCustomer,
-  deleteCustomer,
-  toggleCustomerStatus,
-  getCustomerStats
+  deleteCustomer
 } = require("../controllers/customerController");
 const { protect } = require("../middleware/authMiddleware");
 const { authorize } = require("../middleware/roleMiddleware");
@@ -26,23 +24,17 @@ const customerValidation = [
 // All routes require authentication
 router.use(protect);
 
-// GET /api/v1/customers/stats
-router.get("/stats", getCustomerStats);
-
 // GET /api/v1/customers
-router.get("/", getAllCustomers);
+router.get("/", getCustomers);
 
 // GET /api/v1/customers/:id
-router.get("/:id", getCustomerById);
+router.get("/:id", getCustomer);
 
 // POST /api/v1/customers
 router.post("/", authorize("admin", "sales"), customerValidation, createCustomer);
 
 // PUT /api/v1/customers/:id
 router.put("/:id", authorize("admin", "sales"), customerValidation, updateCustomer);
-
-// PATCH /api/v1/customers/:id/status
-router.patch("/:id/status", authorize("admin", "sales"), toggleCustomerStatus);
 
 // DELETE /api/v1/customers/:id
 router.delete("/:id", authorize("admin"), deleteCustomer);
