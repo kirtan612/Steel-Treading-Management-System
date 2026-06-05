@@ -227,3 +227,43 @@ Upcoming Phases:
 5. Deployment
 
 
+
+
+---
+
+## API Documentation
+
+The backend API is fully documented using Swagger UI. After starting the backend server, you can access the interactive API documentation at:
+
+**URL:** `http://localhost:5000/api/docs`
+
+### Features:
+- Complete API endpoint documentation
+- Request/response schemas
+- Interactive testing interface
+- JWT authentication support
+
+### How to Test APIs in Swagger UI:
+
+1. Start the backend server: `npm run dev` (in the `backend` folder)
+2. Open `http://localhost:5000/api/docs` in your browser
+3. Find **POST /api/v1/auth/login** under the Auth section
+4. Click "Try it out" and enter credentials:
+   ```json
+   {
+     "email": "your-email@example.com",
+     "password": "your-password"
+   }
+   ```
+5. Click "Execute" and copy the `accessToken` from the response
+6. Click the 🔓 **Authorize** button at the top right
+7. Paste the token (without "Bearer" prefix) and click "Authorize"
+8. Now you can test any protected endpoint directly from Swagger UI
+
+### API Modules:
+- **Auth** - Authentication and authorization
+- **Inventory** - Steel pipe inventory management
+- **Customers** - Customer management
+- **Orders** - Order management
+- **Invoices** - Invoice management
+- **Reports** - Business reports and analytics

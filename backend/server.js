@@ -5,6 +5,8 @@ const helmet = require("helmet");
 const morgan = require("morgan");
 const cookieParser = require("cookie-parser");
 const rateLimit = require("express-rate-limit");
+const swaggerUi = require("swagger-ui-express");
+const swaggerSpec = require("./config/swagger");
 const { connectDB } = require("./config/database");
 const errorHandler = require("./middleware/errorHandler");
 
@@ -53,6 +55,17 @@ app.use(cookieParser());
 if (process.env.NODE_ENV === "development") {
   app.use(morgan("dev"));
 }
+
+// Swagger UI (before rate limiters)
+app.get("/api/docs", (req, res) => res.redirect("/api/docs/"));
+app.use(
+  "/api/docs/",
+  swaggerUi.serve,
+  swaggerUi.setup(swaggerSpec, {
+    customSiteTitle: "SteelTrack API Docs",
+    customCss: ".swagger-ui .topbar { background-color: #1B3A5C; } .swagger-ui .topbar .download-url-wrapper { display: none; }"
+  })
+);
 
 // Health check
 app.get("/api/health", (req, res) => {
