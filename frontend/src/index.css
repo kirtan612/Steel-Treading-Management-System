@@ -30,6 +30,31 @@ h1, h2, h3, h4, h5, .font-heading {
 ::-webkit-scrollbar-thumb { background: #C8CDD3; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #9AA3AE; }
 
+/* Smooth scrolling for better UX */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Prevent horizontal scroll on mobile */
+body {
+  overflow-x: hidden;
+}
+
+/* Touch-friendly tap targets on mobile */
+@media (max-width: 768px) {
+  button, a, input[type="checkbox"], input[type="radio"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* Better spacing on mobile */
+  .mobile-spacing {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
+
+/* Print styles */
 @media print {
   body { background: white; }
   .no-print { display: none !important; }

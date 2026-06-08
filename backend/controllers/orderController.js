@@ -3,6 +3,12 @@ const { generateOrderNumber } = require("../utils/generateNumbers");
 const calcGST = require("../utils/calcGST");
 const { validationResult } = require("express-validator");
 const { Op } = require("sequelize");
+
+/**
+ * SECURITY NOTE: SQL Injection Protection
+ * Sequelize ORM uses parameterized queries which prevent SQL injection.
+ * Never bypass Sequelize with raw SQL unless absolutely necessary.
+ */
 const { sequelize } = require("../config/database");
 
 // Helper to resolve/populate user names in JSONB statusHistory array

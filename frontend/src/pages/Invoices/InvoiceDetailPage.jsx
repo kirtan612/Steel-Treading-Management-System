@@ -1,11 +1,14 @@
 import { useParams } from 'react-router-dom';
-import { Printer } from 'lucide-react';
+import { useState } from 'react';
+import { Printer, Download } from 'lucide-react';
 import { mockInvoices, mockOrders } from '../../data/mockData';
+import { generateInvoicePDF } from '../../utils/generateInvoicePDF';
 
 export default function InvoiceDetailPage() {
   const { id } = useParams();
   const invoice = mockInvoices.find(i => i.id === id);
   const order = mockOrders.find(o => o.id === invoice?.orderId);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
   if (!invoice || !order) return <div>Invoice not found</div>;
 
@@ -19,16 +22,84 @@ export default function InvoiceDetailPage() {
     window.print();
   };
 
+  const handleDownloadPDF = () => {
+    setIsGeneratingPDF(true);
+    
+    // Brief timeout for UX (show loading state)
+    setTimeout(() => {
+      // Transform data to match PDF utility expectations
+      const pdfData = {
+        invoiceNumber: invoice.id,
+        issueDate: invoice.issueDate,
+        dueDate: invoice.dueDate,
+        customer: {
+          name: invoice.customerName,
+          company: invoice.customerName,
+          gstNumber: invoice.customerGST,
+          billingAddress: {
+            street: '47, GIDC Estate, Phase 2',
+            city: 'Ahmedabad',
+            state: 'Gujarat',
+            pincode: '382024',
+          },
+        },
+        items: order.items.map(item => ({
+          itemName: item.name,
+          size: '',
+          grade: '',
+          quantity: item.qty,
+          unit: item.unit,
+          rate: item.unitPrice,
+          amount: item.subtotal,
+        })),
+        subtotal: order.subtotal,
+        cgst: order.cgst,
+        sgst: order.sgst,
+        igst: 0,
+        totalTax: order.cgst + order.sgst,
+        grandTotal: invoice.grandTotal,
+        amountPaid: invoice.status === 'Paid' ? invoice.grandTotal : 0,
+        balance: invoice.status === 'Paid' ? 0 : invoice.grandTotal,
+        status: invoice.status.toLowerCase(),
+        termsAndConditions: order.paymentTerms ? `Payment due within ${order.paymentTerms}` : 'Payment due within 30 days',
+        notes: '',
+      };
+
+      generateInvoicePDF(pdfData);
+      setIsGeneratingPDF(false);
+    }, 300);
+  };
+
   return (
     <div>
-      {/* Print Button */}
-      <div className="mb-6 no-print">
+      {/* Action Buttons */}
+      <div className="mb-6 no-print flex gap-3">
+        <button
+          onClick={handleDownloadPDF}
+          disabled={isGeneratingPDF}
+          className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-btn text-sm hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {isGeneratingPDF ? (
+            <>
+              <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Generating...
+            </>
+          ) : (
+            <>
+              <Download size={16} />
+              Download PDF
+            </>
+          )}
+        </button>
         <button
           onClick={handlePrint}
           className="flex items-center gap-2 px-4 py-2 border border-border rounded-btn text-sm hover:bg-gray-50"
         >
           <Printer size={16} />
-          Print / Download PDF
+          Print
         </button>
       </div>
 

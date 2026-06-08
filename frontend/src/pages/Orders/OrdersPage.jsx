@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Eye } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { Plus, Search, Eye, ShoppingCart } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import StatusBadge from '../../components/ui/StatusBadge';
+import EmptyState from '../../components/ui/EmptyState';
 import { mockOrders } from '../../data/mockData';
 
 export default function OrdersPage() {
@@ -78,57 +80,76 @@ export default function OrdersPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-white shadow-card rounded-card overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-[#F7F8FA]">
-              <tr>
-                <th className="text-left text-xs font-medium text-muted px-4 py-3">Order ID</th>
-                <th className="text-left text-xs font-medium text-muted px-4 py-3">Customer</th>
-                <th className="text-left text-xs font-medium text-muted px-4 py-3">Date</th>
-                <th className="text-left text-xs font-medium text-muted px-4 py-3">Items</th>
-                <th className="text-left text-xs font-medium text-muted px-4 py-3">Amount</th>
-                <th className="text-left text-xs font-medium text-muted px-4 py-3">Status</th>
-                <th className="text-left text-xs font-medium text-muted px-4 py-3">Payment</th>
-                <th className="text-left text-xs font-medium text-muted px-4 py-3">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredOrders.map((order) => (
-                <tr key={order.id} className="border-t border-border hover:bg-[#F7F8FA]">
-                  <td className="px-4 py-3">
-                    <button
-                      onClick={() => navigate(`/orders/${order.id}`)}
-                      className="font-mono text-xs text-accent hover:underline"
-                    >
-                      {order.id}
-                    </button>
-                  </td>
-                  <td className="px-4 py-3 text-sm">{order.customerName}</td>
-                  <td className="px-4 py-3 text-sm text-muted">{order.orderDate}</td>
-                  <td className="px-4 py-3 text-sm">{order.items.length} items</td>
-                  <td className="px-4 py-3 text-sm font-medium">{formatCurrency(order.grandTotal)}</td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={order.status} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={order.paymentStatus} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <button
-                      onClick={() => navigate(`/orders/${order.id}`)}
-                      className="text-primary hover:text-primary-hover"
-                      title="View"
-                    >
-                      <Eye size={16} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {filteredOrders.length === 0 ? (
+        <div className="bg-white shadow-card rounded-card">
+          <EmptyState 
+            icon={ShoppingCart}
+            title={searchTerm || statusFilter !== 'All' ? "No orders found" : "No orders yet"}
+            message={searchTerm || statusFilter !== 'All' ? "No orders match your current filters" : "Create your first order to get started"}
+            actionLabel={searchTerm || statusFilter !== 'All' ? "Clear Filters" : "Create Order"}
+            onAction={() => {
+              if (searchTerm || statusFilter !== 'All') {
+                setSearchTerm('');
+                setStatusFilter('All');
+              } else {
+                navigate('/orders/new');
+              }
+            }}
+          />
         </div>
-      </div>
+      ) : (
+        <div className="bg-white shadow-card rounded-card overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px]">
+              <thead className="bg-[#F7F8FA]">
+                <tr>
+                  <th className="text-left text-xs font-medium text-muted px-4 py-3">Order ID</th>
+                  <th className="text-left text-xs font-medium text-muted px-4 py-3">Customer</th>
+                  <th className="text-left text-xs font-medium text-muted px-4 py-3 hidden sm:table-cell">Date</th>
+                  <th className="text-left text-xs font-medium text-muted px-4 py-3 hidden md:table-cell">Items</th>
+                  <th className="text-left text-xs font-medium text-muted px-4 py-3">Amount</th>
+                  <th className="text-left text-xs font-medium text-muted px-4 py-3">Status</th>
+                  <th className="text-left text-xs font-medium text-muted px-4 py-3 hidden sm:table-cell">Payment</th>
+                  <th className="text-left text-xs font-medium text-muted px-4 py-3">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredOrders.map((order) => (
+                  <tr key={order.id} className="border-t border-border hover:bg-[#F7F8FA]">
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => navigate(`/orders/${order.id}`)}
+                        className="font-mono text-xs text-accent hover:underline"
+                      >
+                        {order.id}
+                      </button>
+                    </td>
+                    <td className="px-4 py-3 text-sm">{order.customerName}</td>
+                    <td className="px-4 py-3 text-sm text-muted hidden sm:table-cell">{order.orderDate}</td>
+                    <td className="px-4 py-3 text-sm hidden md:table-cell">{order.items.length} items</td>
+                    <td className="px-4 py-3 text-sm font-medium">{formatCurrency(order.grandTotal)}</td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={order.status} />
+                    </td>
+                    <td className="px-4 py-3 hidden sm:table-cell">
+                      <StatusBadge status={order.paymentStatus} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => navigate(`/orders/${order.id}`)}
+                        className="text-primary hover:text-primary-hover"
+                        title="View"
+                      >
+                        <Eye size={16} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

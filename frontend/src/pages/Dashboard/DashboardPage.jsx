@@ -146,7 +146,7 @@ export default function DashboardPage() {
         <h3 className="text-lg font-heading font-semibold text-[#1A1F2E] mb-4">
           Revenue Overview — Last 6 Months
         </h3>
-        <ResponsiveContainer width="100%" height={280}>
+        <ResponsiveContainer width="100%" height={280} className="min-h-[200px] md:min-h-[280px]">
           <AreaChart data={mockRevenueChart}>
             <defs>
               <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">

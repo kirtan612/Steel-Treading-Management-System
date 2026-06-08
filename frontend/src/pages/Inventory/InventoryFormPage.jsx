@@ -252,20 +252,20 @@ export default function InventoryFormPage() {
         </div>
 
         {/* Action bar */}
-        <div className="flex items-center justify-between mt-5 bg-white
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mt-5 bg-white
                         border border-[#E2E6EA] rounded-[8px] px-5 py-3.5">
-          <p className="text-xs text-[#9AA3AE]">
+          <p className="text-xs text-[#9AA3AE] text-center sm:text-left">
             Fields marked <span className="text-[#DC2626]">*</span> are required
           </p>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 w-full sm:w-auto">
             <button type="button" onClick={() => navigate("/inventory")}
-                    className="px-4 py-2 text-sm font-medium text-[#5A6473]
+                    className="flex-1 sm:flex-none px-4 py-2 text-sm font-medium text-[#5A6473]
                                border border-[#E2E6EA] rounded-[6px]
                                hover:bg-[#F7F8FA] transition-colors">
               Cancel
             </button>
             <button type="submit"
-                    className="flex items-center gap-2 px-5 py-2 text-sm font-medium
+                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2 text-sm font-medium
                                bg-[#E85D26] hover:bg-[#C94D1E] text-white
                                rounded-[6px] transition-colors active:scale-[0.98]">
               <Save size={15} />

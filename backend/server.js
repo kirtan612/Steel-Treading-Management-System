@@ -1,10 +1,16 @@
+// Validate environment variables FIRST before anything else
 require("dotenv").config();
+const validateEnv = require("./config/validateEnv");
+validateEnv();
+
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
 const cookieParser = require("cookie-parser");
 const rateLimit = require("express-rate-limit");
+const compression = require("compression");
+const mongoSanitize = require("express-mongo-sanitize");
 const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./config/swagger");
 const { connectDB } = require("./config/database");
@@ -62,10 +68,25 @@ const generalLimiter = rateLimit({
   message: { success: false, message: "Too many requests" },
 });
 
-// Parsers
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true }));
+// Parsers - reduced limit for security (1MB is sufficient for ERP operations)
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 app.use(cookieParser());
+
+// Input sanitization - prevents injection attacks
+// Sanitize body and params but skip query to avoid read-only property errors
+app.use(mongoSanitize({
+  replaceWith: '_',
+  allowDots: true,
+  onSanitize: ({ req, key }) => {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn(`⚠️  Sanitized suspicious input in ${req.method} ${req.path}: ${key}`);
+    }
+  },
+}));
+
+// Response compression for bandwidth optimization
+app.use(compression());
 
 // Logging (dev only)
 if (process.env.NODE_ENV === "development") {

@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { Plus, Search, Edit, Trash2, Package } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import StatusBadge from '../../components/ui/StatusBadge';
 import EmptyState from '../../components/ui/EmptyState';
+import ConfirmModal from '../../components/ui/ConfirmModal';
 import { mockInventory } from '../../data/mockData';
 
 export default function InventoryPage() {
@@ -13,6 +15,8 @@ export default function InventoryPage() {
   const [typeFilter, setTypeFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
   const [currentPage, setCurrentPage] = useState(1);
+  const [deleteModal, setDeleteModal] = useState({ isOpen: false, itemId: null, itemName: '' });
+  const [deletingId, setDeletingId] = useState(null);
   const itemsPerPage = 6;
 
   const filteredInventory = inventory.filter(item => {
@@ -26,6 +30,43 @@ export default function InventoryPage() {
   const totalPages = Math.ceil(filteredInventory.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedInventory = filteredInventory.slice(startIndex, startIndex + itemsPerPage);
+
+  const openDeleteModal = (id, name) => {
+    setDeleteModal({ isOpen: true, itemId: id, itemName: name });
+  };
+
+  const closeDeleteModal = () => {
+    setDeleteModal({ isOpen: false, itemId: null, itemName: '' });
+  };
+
+  const confirmDelete = async () => {
+    const itemId = deleteModal.itemId;
+    setDeletingId(itemId);
+    closeDeleteModal();
+
+    try {
+      // Optimistically remove from UI
+      setInventory(inventory.filter(item => item.id !== itemId));
+      
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      toast.success('Item deleted successfully');
+    } catch (error) {
+      // Revert on error
+      toast.error('Failed to delete item');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const clearFilters = () => {
+    setSearchTerm('');
+    setTypeFilter('All');
+    setStatusFilter('All');
+  };
+
+  const hasActiveFilters = searchTerm || typeFilter !== 'All' || statusFilter !== 'All';
 
   const handleDelete = (id) => {
     if (window.confirm('Are you sure you want to delete this item?')) {
@@ -49,8 +90,8 @@ export default function InventoryPage() {
 
       {/* Filters */}
       <div className="bg-white shadow-card rounded-card p-4 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="md:col-span-2 relative">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="sm:col-span-2 relative">
             <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
             <input
               type="text"
@@ -90,20 +131,26 @@ export default function InventoryPage() {
       {/* Table */}
       {paginatedInventory.length === 0 ? (
         <div className="bg-white shadow-card rounded-card">
-          <EmptyState icon={Package} message="No inventory items found" />
+          <EmptyState 
+            icon={Package}
+            title={hasActiveFilters ? "No results found" : "No inventory items found"}
+            message={hasActiveFilters ? "Try different filters or search terms" : "Add your first steel pipe item to get started"}
+            actionLabel={hasActiveFilters ? "Clear Filters" : "Add Item"}
+            onAction={hasActiveFilters ? clearFilters : () => navigate('/inventory/new')}
+          />
         </div>
       ) : (
         <>
           <div className="bg-white shadow-card rounded-card overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <table className="w-full min-w-[640px]">
                 <thead className="bg-[#F7F8FA]">
                   <tr>
                     <th className="text-left text-xs font-medium text-muted px-4 py-3">Item Code</th>
                     <th className="text-left text-xs font-medium text-muted px-4 py-3">Item Name</th>
                     <th className="text-left text-xs font-medium text-muted px-4 py-3">Type</th>
-                    <th className="text-left text-xs font-medium text-muted px-4 py-3">Size</th>
-                    <th className="text-left text-xs font-medium text-muted px-4 py-3">Grade</th>
+                    <th className="text-left text-xs font-medium text-muted px-4 py-3 hidden sm:table-cell">Size</th>
+                    <th className="text-left text-xs font-medium text-muted px-4 py-3 hidden sm:table-cell">Grade</th>
                     <th className="text-left text-xs font-medium text-muted px-4 py-3">Stock</th>
                     <th className="text-left text-xs font-medium text-muted px-4 py-3">Unit Price</th>
                     <th className="text-left text-xs font-medium text-muted px-4 py-3">Status</th>
@@ -118,10 +165,10 @@ export default function InventoryPage() {
                       </td>
                       <td className="px-4 py-3 text-sm font-medium">{item.name}</td>
                       <td className="px-4 py-3 text-sm">{item.pipeType}</td>
-                      <td className="px-4 py-3 text-sm">
+                      <td className="px-4 py-3 text-sm hidden sm:table-cell">
                         {item.outerDiameter}mm × {item.wallThickness}mm
                       </td>
-                      <td className="px-4 py-3 text-sm">{item.grade}</td>
+                      <td className="px-4 py-3 text-sm hidden sm:table-cell">{item.grade}</td>
                       <td className="px-4 py-3 text-sm">
                         <span className={item.status === 'Out of Stock' ? 'text-danger font-medium' : ''}>
                           {item.stockQty} {item.unit}
@@ -135,15 +182,24 @@ export default function InventoryPage() {
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => navigate(`/inventory/${item.id}/edit`)}
-                            className="text-primary hover:text-primary-hover"
+                            disabled={deletingId === item.id}
+                            className="text-primary hover:text-primary-hover disabled:opacity-50"
                           >
                             <Edit size={16} />
                           </button>
                           <button
-                            onClick={() => handleDelete(item.id)}
-                            className="text-danger hover:text-danger/80"
+                            onClick={() => openDeleteModal(item.id, item.name)}
+                            disabled={deletingId === item.id}
+                            className="text-danger hover:text-danger/80 disabled:opacity-50"
                           >
-                            <Trash2 size={16} />
+                            {deletingId === item.id ? (
+                              <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                            ) : (
+                              <Trash2 size={16} />
+                            )}
                           </button>
                         </div>
                       </td>
@@ -178,6 +234,17 @@ export default function InventoryPage() {
           )}
         </>
       )}
+
+      {/* Confirm Delete Modal */}
+      <ConfirmModal
+        isOpen={deleteModal.isOpen}
+        title="Delete Item"
+        message={`Are you sure you want to delete "${deleteModal.itemName}"? This action cannot be undone.`}
+        confirmLabel="Delete"
+        onConfirm={confirmDelete}
+        onCancel={closeDeleteModal}
+        danger
+      />
     </div>
   );
 }

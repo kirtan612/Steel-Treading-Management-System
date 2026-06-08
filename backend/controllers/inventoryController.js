@@ -3,6 +3,14 @@ const { Op } = require("sequelize");
 const { sequelize } = require("../config/database");
 const { validationResult } = require("express-validator");
 
+/**
+ * SECURITY NOTE: SQL Injection Protection
+ * All database queries in this controller use Sequelize ORM with parameterized queries,
+ * which automatically protects against SQL injection attacks.
+ * DO NOT bypass Sequelize with raw SQL queries unless absolutely necessary.
+ * If raw queries are needed, always use parameterized queries with replacements.
+ */
+
 // Helper to format inventory response including virtual status
 const formatInventoryResponse = (itemInstance) => {
   if (!itemInstance) return null;

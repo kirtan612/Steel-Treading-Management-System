@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, Download } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { Eye, Download, FileText } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import StatusBadge from '../../components/ui/StatusBadge';
+import EmptyState from '../../components/ui/EmptyState';
 import { mockInvoices } from '../../data/mockData';
 
 export default function InvoicesPage() {
@@ -32,7 +34,7 @@ export default function InvoicesPage() {
       <PageHeader title="Invoices" subtitle="Manage customer invoices" />
 
       {/* Summary Chips */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
         {Object.entries(statusCounts).map(([status, count]) => (
           <div key={status} className="bg-white shadow-card rounded-card p-4">
             <div className="flex items-center gap-2 mb-1">
@@ -69,74 +71,86 @@ export default function InvoicesPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-white shadow-card rounded-card overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-[#F7F8FA]">
-              <tr>
-                <th className="text-left text-xs font-medium text-muted px-4 py-3">Invoice #</th>
-                <th className="text-left text-xs font-medium text-muted px-4 py-3">Customer</th>
-                <th className="text-left text-xs font-medium text-muted px-4 py-3">Order ID</th>
-                <th className="text-left text-xs font-medium text-muted px-4 py-3">Issue Date</th>
-                <th className="text-left text-xs font-medium text-muted px-4 py-3">Due Date</th>
-                <th className="text-left text-xs font-medium text-muted px-4 py-3">Amount</th>
-                <th className="text-left text-xs font-medium text-muted px-4 py-3">Paid</th>
-                <th className="text-left text-xs font-medium text-muted px-4 py-3">Balance</th>
-                <th className="text-left text-xs font-medium text-muted px-4 py-3">Status</th>
-                <th className="text-left text-xs font-medium text-muted px-4 py-3">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredInvoices.map((invoice) => (
-                <tr key={invoice.id} className="border-t border-border hover:bg-[#F7F8FA]">
-                  <td className="px-4 py-3">
-                    <button
-                      onClick={() => navigate(`/invoices/${invoice.id}`)}
-                      className="font-mono text-xs text-accent hover:underline"
-                    >
-                      {invoice.id}
-                    </button>
-                  </td>
-                  <td className="px-4 py-3 text-sm">{invoice.customerName}</td>
-                  <td className="px-4 py-3">
-                    <span className="font-mono text-xs text-muted">{invoice.orderId}</span>
-                  </td>
-                  <td className="px-4 py-3 text-sm">{invoice.issueDate}</td>
-                  <td className="px-4 py-3 text-sm">{invoice.dueDate}</td>
-                  <td className="px-4 py-3 text-sm font-medium">{formatCurrency(invoice.grandTotal)}</td>
-                  <td className="px-4 py-3 text-sm">{formatCurrency(invoice.amountPaid)}</td>
-                  <td className="px-4 py-3 text-sm">
-                    <span className={invoice.balance > 0 ? 'text-danger font-medium' : ''}>
-                      {formatCurrency(invoice.balance)}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={invoice.status} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
+      {filteredInvoices.length === 0 ? (
+        <div className="bg-white shadow-card rounded-card">
+          <EmptyState 
+            icon={FileText}
+            title={statusFilter !== 'All' ? "No invoices found" : "No invoices yet"}
+            message={statusFilter !== 'All' ? "No invoices match your current filter" : "Invoices will appear here once orders are confirmed"}
+            actionLabel={statusFilter !== 'All' ? "Clear Filter" : null}
+            onAction={statusFilter !== 'All' ? () => setStatusFilter('All') : null}
+          />
+        </div>
+      ) : (
+        <div className="bg-white shadow-card rounded-card overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[768px]">
+              <thead className="bg-[#F7F8FA]">
+                <tr>
+                  <th className="text-left text-xs font-medium text-muted px-4 py-3">Invoice #</th>
+                  <th className="text-left text-xs font-medium text-muted px-4 py-3">Customer</th>
+                  <th className="text-left text-xs font-medium text-muted px-4 py-3 hidden md:table-cell">Order ID</th>
+                  <th className="text-left text-xs font-medium text-muted px-4 py-3 hidden sm:table-cell">Issue Date</th>
+                  <th className="text-left text-xs font-medium text-muted px-4 py-3 hidden lg:table-cell">Due Date</th>
+                  <th className="text-left text-xs font-medium text-muted px-4 py-3">Amount</th>
+                  <th className="text-left text-xs font-medium text-muted px-4 py-3 hidden md:table-cell">Paid</th>
+                  <th className="text-left text-xs font-medium text-muted px-4 py-3 hidden sm:table-cell">Balance</th>
+                  <th className="text-left text-xs font-medium text-muted px-4 py-3">Status</th>
+                  <th className="text-left text-xs font-medium text-muted px-4 py-3">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredInvoices.map((invoice) => (
+                  <tr key={invoice.id} className="border-t border-border hover:bg-[#F7F8FA]">
+                    <td className="px-4 py-3">
                       <button
                         onClick={() => navigate(`/invoices/${invoice.id}`)}
-                        className="text-primary hover:text-primary-hover"
-                        title="View"
+                        className="font-mono text-xs text-accent hover:underline"
                       >
-                        <Eye size={16} />
+                        {invoice.id}
                       </button>
-                      <button
-                        onClick={() => alert('PDF download will be available in Phase 5')}
-                        className="text-muted hover:text-[#1A1F2E]"
-                        title="Download"
-                      >
-                        <Download size={16} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    </td>
+                    <td className="px-4 py-3 text-sm">{invoice.customerName}</td>
+                    <td className="px-4 py-3 hidden md:table-cell">
+                      <span className="font-mono text-xs text-muted">{invoice.orderId}</span>
+                    </td>
+                    <td className="px-4 py-3 text-sm hidden sm:table-cell">{invoice.issueDate}</td>
+                    <td className="px-4 py-3 text-sm hidden lg:table-cell">{invoice.dueDate}</td>
+                    <td className="px-4 py-3 text-sm font-medium">{formatCurrency(invoice.grandTotal)}</td>
+                    <td className="px-4 py-3 text-sm hidden md:table-cell">{formatCurrency(invoice.amountPaid)}</td>
+                    <td className="px-4 py-3 text-sm hidden sm:table-cell">
+                      <span className={invoice.balance > 0 ? 'text-danger font-medium' : ''}>
+                        {formatCurrency(invoice.balance)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={invoice.status} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => navigate(`/invoices/${invoice.id}`)}
+                          className="text-primary hover:text-primary-hover"
+                          title="View"
+                        >
+                          <Eye size={16} />
+                        </button>
+                        <button
+                          onClick={() => toast.info('PDF download available on invoice detail page')}
+                          className="text-muted hover:text-[#1A1F2E] hidden sm:inline-block"
+                          title="Download"
+                        >
+                          <Download size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
