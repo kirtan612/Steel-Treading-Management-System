@@ -1,21 +1,51 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { Plus, Search, Eye, ShoppingCart } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import StatusBadge from '../../components/ui/StatusBadge';
 import EmptyState from '../../components/ui/EmptyState';
-import { mockOrders } from '../../data/mockData';
+import LoadingSpinner from '../../components/ui/LoadingSpinner';
+import { api } from '../../utils/api';
 
 export default function OrdersPage() {
   const navigate = useNavigate();
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
 
-  const filteredOrders = mockOrders.filter(order => {
-    const matchesSearch = order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         order.customerName.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'All' || order.status === statusFilter;
+  const fetchOrders = async () => {
+    try {
+      setLoading(true);
+      const result = await api.get('/orders?limit=100');
+      if (result.success) {
+        setOrders(result.data.orders || []);
+      }
+    } catch (error) {
+      toast.error(error.message || 'Failed to fetch orders');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchOrders();
+  }, []);
+
+  const mapStatusLabel = (status) => {
+    if (status === 'draft') return 'Pending';
+    return status.charAt(0).toUpperCase() + status.slice(1);
+  };
+
+  const filteredOrders = orders.filter(order => {
+    const matchesSearch = 
+      order.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (order.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const mappedFilter = statusFilter === 'Pending' ? 'draft' : statusFilter.toLowerCase();
+    const matchesStatus = statusFilter === 'All' || order.status === mappedFilter;
+    
     return matchesSearch && matchesStatus;
   });
 
@@ -23,15 +53,15 @@ export default function OrdersPage() {
     style: 'currency',
     currency: 'INR',
     maximumFractionDigits: 2,
-  }).format(value);
+  }).format(value || 0);
 
   const statusCounts = {
-    'All': mockOrders.length,
-    'Pending': mockOrders.filter(o => o.status === 'Pending').length,
-    'Confirmed': mockOrders.filter(o => o.status === 'Confirmed').length,
-    'Dispatched': mockOrders.filter(o => o.status === 'Dispatched').length,
-    'Delivered': mockOrders.filter(o => o.status === 'Delivered').length,
-    'Cancelled': mockOrders.filter(o => o.status === 'Cancelled').length,
+    'All': orders.length,
+    'Pending': orders.filter(o => o.status === 'draft').length,
+    'Confirmed': orders.filter(o => o.status === 'confirmed').length,
+    'Dispatched': orders.filter(o => o.status === 'dispatched').length,
+    'Delivered': orders.filter(o => o.status === 'delivered').length,
+    'Cancelled': orders.filter(o => o.status === 'cancelled').length,
   };
 
   return (
@@ -68,10 +98,10 @@ export default function OrdersPage() {
       {/* Search */}
       <div className="bg-white shadow-card rounded-card p-4 mb-6">
         <div className="relative">
-          <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+          <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9AA3AE]" />
           <input
             type="text"
-            placeholder="Search by order ID or customer..."
+            placeholder="Search by order number or customer..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 border border-border rounded-btn text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
@@ -80,7 +110,11 @@ export default function OrdersPage() {
       </div>
 
       {/* Table */}
-      {filteredOrders.length === 0 ? (
+      {loading ? (
+        <div className="py-20 bg-white shadow-card rounded-card flex justify-center">
+          <LoadingSpinner />
+        </div>
+      ) : filteredOrders.length === 0 ? (
         <div className="bg-white shadow-card rounded-card">
           <EmptyState 
             icon={ShoppingCart}
@@ -103,48 +137,51 @@ export default function OrdersPage() {
             <table className="w-full min-w-[640px]">
               <thead className="bg-[#F7F8FA]">
                 <tr>
-                  <th className="text-left text-xs font-medium text-muted px-4 py-3">Order ID</th>
+                  <th className="text-left text-xs font-medium text-muted px-4 py-3">Order Number</th>
                   <th className="text-left text-xs font-medium text-muted px-4 py-3">Customer</th>
                   <th className="text-left text-xs font-medium text-muted px-4 py-3 hidden sm:table-cell">Date</th>
                   <th className="text-left text-xs font-medium text-muted px-4 py-3 hidden md:table-cell">Items</th>
                   <th className="text-left text-xs font-medium text-muted px-4 py-3">Amount</th>
                   <th className="text-left text-xs font-medium text-muted px-4 py-3">Status</th>
-                  <th className="text-left text-xs font-medium text-muted px-4 py-3 hidden sm:table-cell">Payment</th>
                   <th className="text-left text-xs font-medium text-muted px-4 py-3">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredOrders.map((order) => (
-                  <tr key={order.id} className="border-t border-border hover:bg-[#F7F8FA]">
-                    <td className="px-4 py-3">
-                      <button
-                        onClick={() => navigate(`/orders/${order.id}`)}
-                        className="font-mono text-xs text-accent hover:underline"
-                      >
-                        {order.id}
-                      </button>
-                    </td>
-                    <td className="px-4 py-3 text-sm">{order.customerName}</td>
-                    <td className="px-4 py-3 text-sm text-muted hidden sm:table-cell">{order.orderDate}</td>
-                    <td className="px-4 py-3 text-sm hidden md:table-cell">{order.items.length} items</td>
-                    <td className="px-4 py-3 text-sm font-medium">{formatCurrency(order.grandTotal)}</td>
-                    <td className="px-4 py-3">
-                      <StatusBadge status={order.status} />
-                    </td>
-                    <td className="px-4 py-3 hidden sm:table-cell">
-                      <StatusBadge status={order.paymentStatus} />
-                    </td>
-                    <td className="px-4 py-3">
-                      <button
-                        onClick={() => navigate(`/orders/${order.id}`)}
-                        className="text-primary hover:text-primary-hover"
-                        title="View"
-                      >
-                        <Eye size={16} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {filteredOrders.map((order) => {
+                  const orderDate = new Date(order.createdAt).toLocaleDateString('en-IN', {
+                    day: '2-digit',
+                    month: 'short',
+                    year: 'numeric',
+                  });
+                  return (
+                    <tr key={order.id} className="border-t border-border hover:bg-[#F7F8FA]">
+                      <td className="px-4 py-3">
+                        <Link
+                          to={`/orders/${order.id}`}
+                          className="font-mono text-xs text-accent hover:underline"
+                        >
+                          {order.orderNumber}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3 text-sm">{order.customer?.name || 'N/A'}</td>
+                      <td className="px-4 py-3 text-sm text-muted hidden sm:table-cell">{orderDate}</td>
+                      <td className="px-4 py-3 text-sm hidden md:table-cell">{(order.items || []).length} items</td>
+                      <td className="px-4 py-3 text-sm font-medium">{formatCurrency(order.grandTotal)}</td>
+                      <td className="px-4 py-3">
+                        <StatusBadge status={mapStatusLabel(order.status)} />
+                      </td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() => navigate(`/orders/${order.id}`)}
+                          className="text-primary hover:text-primary-hover"
+                          title="View"
+                        >
+                          <Eye size={16} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

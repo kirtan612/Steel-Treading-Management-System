@@ -15,7 +15,7 @@ const { body } = require("express-validator");
 
 // Validation rules
 const invoiceValidation = [
-  body("orderId").isMongoId().withMessage("Valid order ID is required"),
+  body("orderId").isUUID().withMessage("Valid order ID is required"),
   body("dueDate").isISO8601().withMessage("Valid due date is required"),
   body("notes").optional().isString().withMessage("Notes must be a string"),
   body("termsAndConditions").optional().isString().withMessage("Terms must be a string")

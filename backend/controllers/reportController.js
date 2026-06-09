@@ -10,27 +10,30 @@ const getDashboardStats = async (req, res, next) => {
     const startOfYear = new Date(today.getFullYear(), 0, 1);
     const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
 
-    // Sales stats using conditional aggregation in a single query
+    // Sales/Revenue stats — use invoices for accurate revenue
+    const invoiceRevenueStats = await Invoice.findOne({
+      attributes: [
+        [sequelize.literal(`SUM(CASE WHEN "issueDate" >= '${startOfMonth.toISOString()}' THEN "grandTotal" ELSE 0 END)`), 'thisMonthValue'],
+        [sequelize.literal(`COUNT(CASE WHEN "issueDate" >= '${startOfMonth.toISOString()}' THEN 1 END)`), 'thisMonthCount'],
+        [sequelize.literal(`SUM(CASE WHEN "issueDate" >= '${lastMonth.toISOString()}' AND "issueDate" < '${startOfMonth.toISOString()}' THEN "grandTotal" ELSE 0 END)`), 'lastMonthValue'],
+        [sequelize.literal(`COUNT(CASE WHEN "issueDate" >= '${lastMonth.toISOString()}' AND "issueDate" < '${startOfMonth.toISOString()}' THEN 1 END)`), 'lastMonthCount'],
+        [sequelize.literal(`SUM(CASE WHEN "issueDate" >= '${startOfYear.toISOString()}' THEN "grandTotal" ELSE 0 END)`), 'thisYearValue'],
+        [sequelize.literal(`COUNT(CASE WHEN "issueDate" >= '${startOfYear.toISOString()}' THEN 1 END)`), 'thisYearCount'],
+      ],
+      raw: true
+    });
+
+    // Order counts for this month
     const salesStats = await Order.findOne({
       attributes: [
-        [sequelize.literal('COUNT(CASE WHEN "createdAt" >= :startOfMonth THEN 1 END)'), 'thisMonthCount'],
-        [sequelize.literal('SUM(CASE WHEN "createdAt" >= :startOfMonth THEN "grandTotal" ELSE 0 END)'), 'thisMonthValue'],
-        
-        [sequelize.literal('COUNT(CASE WHEN "createdAt" >= :startOfYear THEN 1 END)'), 'thisYearCount'],
-        [sequelize.literal('SUM(CASE WHEN "createdAt" >= :startOfYear THEN "grandTotal" ELSE 0 END)'), 'thisYearValue'],
-        
-        [sequelize.literal('COUNT(CASE WHEN "createdAt" >= :lastMonth AND "createdAt" < :startOfMonth THEN 1 END)'), 'lastMonthCount'],
-        [sequelize.literal('SUM(CASE WHEN "createdAt" >= :lastMonth AND "createdAt" < :startOfMonth THEN "grandTotal" ELSE 0 END)'), 'lastMonthValue'],
+        [sequelize.literal(`COUNT(CASE WHEN "createdAt" >= '${startOfMonth.toISOString()}' THEN 1 END)`), 'thisMonthCount'],
+        [sequelize.literal(`SUM(CASE WHEN "createdAt" >= '${startOfMonth.toISOString()}' THEN "grandTotal" ELSE 0 END)`), 'thisMonthValue'],
+        [sequelize.literal(`COUNT(CASE WHEN "createdAt" >= '${startOfYear.toISOString()}' THEN 1 END)`), 'thisYearCount'],
+        [sequelize.literal(`SUM(CASE WHEN "createdAt" >= '${startOfYear.toISOString()}' THEN "grandTotal" ELSE 0 END)`), 'thisYearValue'],
+        [sequelize.literal(`COUNT(CASE WHEN "createdAt" >= '${lastMonth.toISOString()}' AND "createdAt" < '${startOfMonth.toISOString()}' THEN 1 END)`), 'lastMonthCount'],
+        [sequelize.literal(`SUM(CASE WHEN "createdAt" >= '${lastMonth.toISOString()}' AND "createdAt" < '${startOfMonth.toISOString()}' THEN "grandTotal" ELSE 0 END)`), 'lastMonthValue'],
       ],
-      where: {
-        isDeleted: false,
-        status: { [Op.ne]: 'cancelled' }
-      },
-      replacements: {
-        startOfMonth: startOfMonth.toISOString(),
-        startOfYear: startOfYear.toISOString(),
-        lastMonth: lastMonth.toISOString()
-      },
+      where: { isDeleted: false, status: { [Op.ne]: 'cancelled' } },
       raw: true
     });
 
@@ -107,7 +110,7 @@ const getDashboardStats = async (req, res, next) => {
         as: 'customer',
         attributes: ['name', 'company']
       }],
-      order: [[sequelize.literal('totalValue'), 'DESC']],
+      order: [[sequelize.literal('"totalValue"'), 'DESC']],
       limit: 5
     });
 
@@ -125,15 +128,15 @@ const getDashboardStats = async (req, res, next) => {
       sales: {
         thisMonth: {
           count: parseInt(salesStats.thisMonthCount || 0),
-          value: parseFloat(parseFloat(salesStats.thisMonthValue || 0).toFixed(2))
+          value: parseFloat(parseFloat(invoiceRevenueStats.thisMonthValue || 0).toFixed(2))
         },
         thisYear: {
           count: parseInt(salesStats.thisYearCount || 0),
-          value: parseFloat(parseFloat(salesStats.thisYearValue || 0).toFixed(2))
+          value: parseFloat(parseFloat(invoiceRevenueStats.thisYearValue || 0).toFixed(2))
         },
         lastMonth: {
           count: parseInt(salesStats.lastMonthCount || 0),
-          value: parseFloat(parseFloat(salesStats.lastMonthValue || 0).toFixed(2))
+          value: parseFloat(parseFloat(invoiceRevenueStats.lastMonthValue || 0).toFixed(2))
         }
       },
       invoices: {
@@ -181,7 +184,7 @@ const getSalesReport = async (req, res, next) => {
     if (startDate && endDate) {
       matchStage.createdAt = {
         [Op.gte]: new Date(startDate),
-        [Op.lte]: new Date(endDate)
+        [Op.lte]: new Date(new Date(endDate).setHours(23, 59, 59, 999))
       };
     }
 
@@ -386,7 +389,7 @@ const getInventoryReport = async (req, res, next) => {
       ],
       where: { isDeleted: false },
       group: ['pipeType'],
-      order: [[sequelize.literal('totalValue'), 'DESC']],
+      order: [[sequelize.literal('"totalValue"'), 'DESC']],
       raw: true
     });
 

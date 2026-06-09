@@ -1,16 +1,21 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { Plus, Search, Edit, Trash2, Package } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import StatusBadge from '../../components/ui/StatusBadge';
 import EmptyState from '../../components/ui/EmptyState';
 import ConfirmModal from '../../components/ui/ConfirmModal';
-import { mockInventory } from '../../data/mockData';
+import LoadingSpinner from '../../components/ui/LoadingSpinner';
+import { api } from '../../utils/api';
+import { useDebounce } from '../../hooks/useDebounce';
 
 export default function InventoryPage() {
   const navigate = useNavigate();
-  const [inventory, setInventory] = useState(mockInventory);
+  const location = useLocation();
+  const [inventory, setInventory] = useState([]);
+  const [pagination, setPagination] = useState({ total: 0, page: 1, totalPages: 1 });
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
@@ -19,17 +24,43 @@ export default function InventoryPage() {
   const [deletingId, setDeletingId] = useState(null);
   const itemsPerPage = 6;
 
-  const filteredInventory = inventory.filter(item => {
-    const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         item.itemCode.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesType = typeFilter === 'All' || item.pipeType === typeFilter;
-    const matchesStatus = statusFilter === 'All' || item.status === statusFilter;
-    return matchesSearch && matchesType && matchesStatus;
-  });
+  const debouncedSearch = useDebounce(searchTerm, 400);
 
-  const totalPages = Math.ceil(filteredInventory.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedInventory = filteredInventory.slice(startIndex, startIndex + itemsPerPage);
+  const fetchInventory = async () => {
+    try {
+      setLoading(true);
+      let queryParams = `?page=${currentPage}&limit=${itemsPerPage}`;
+      if (debouncedSearch) {
+        queryParams += `&search=${encodeURIComponent(debouncedSearch)}`;
+      }
+      if (typeFilter !== 'All') {
+        queryParams += `&type=${encodeURIComponent(typeFilter)}`;
+      }
+      if (statusFilter !== 'All') {
+        const backendStatus = statusFilter.toLowerCase().replace(/ /g, '-');
+        queryParams += `&status=${backendStatus}`;
+      }
+
+      const result = await api.get(`/inventory${queryParams}`);
+      if (result.success) {
+        setInventory(result.data);
+        setPagination(result.pagination);
+      }
+    } catch (error) {
+      toast.error(error.message || 'Failed to fetch inventory');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchInventory();
+  }, [currentPage, debouncedSearch, typeFilter, statusFilter, location.key]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch, typeFilter, statusFilter]);
 
   const openDeleteModal = (id, name) => {
     setDeleteModal({ isOpen: true, itemId: id, itemName: name });
@@ -45,16 +76,13 @@ export default function InventoryPage() {
     closeDeleteModal();
 
     try {
-      // Optimistically remove from UI
-      setInventory(inventory.filter(item => item.id !== itemId));
-      
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      toast.success('Item deleted successfully');
+      const result = await api.delete(`/inventory/${itemId}`);
+      if (result.success) {
+        toast.success('Item deleted successfully');
+        fetchInventory();
+      }
     } catch (error) {
-      // Revert on error
-      toast.error('Failed to delete item');
+      toast.error(error.message || 'Failed to delete item');
     } finally {
       setDeletingId(null);
     }
@@ -68,13 +96,13 @@ export default function InventoryPage() {
 
   const hasActiveFilters = searchTerm || typeFilter !== 'All' || statusFilter !== 'All';
 
-  const handleDelete = (id) => {
-    if (window.confirm('Are you sure you want to delete this item?')) {
-      setInventory(inventory.filter(item => item.id !== id));
-    }
+  const formatCurrency = (value) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      maximumFractionDigits: 2,
+    }).format(value);
   };
-
-  const formatCurrency = (value) => `₹${value}`;
 
   return (
     <div>
@@ -92,7 +120,7 @@ export default function InventoryPage() {
       <div className="bg-white shadow-card rounded-card p-4 mb-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
           <div className="sm:col-span-2 relative">
-            <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+            <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9AA3AE]" />
             <input
               type="text"
               placeholder="Search by name or item code..."
@@ -111,6 +139,7 @@ export default function InventoryPage() {
             <option>GI Pipe</option>
             <option>Seamless</option>
             <option>Hollow Section</option>
+            <option>MS Pipe</option>
           </select>
           <select
             value={statusFilter}
@@ -124,12 +153,16 @@ export default function InventoryPage() {
           </select>
         </div>
         <p className="text-sm text-muted mt-3">
-          Showing {filteredInventory.length} of {inventory.length} items
+          Showing {inventory.length} of {pagination.total} items
         </p>
       </div>
 
       {/* Table */}
-      {paginatedInventory.length === 0 ? (
+      {loading ? (
+        <div className="py-20 bg-white shadow-card rounded-card flex justify-center">
+          <LoadingSpinner />
+        </div>
+      ) : inventory.length === 0 ? (
         <div className="bg-white shadow-card rounded-card">
           <EmptyState 
             icon={Package}
@@ -158,7 +191,7 @@ export default function InventoryPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {paginatedInventory.map((item) => (
+                  {inventory.map((item) => (
                     <tr key={item.id} className="border-t border-border hover:bg-[#F7F8FA]">
                       <td className="px-4 py-3">
                         <span className="font-mono text-xs text-muted">{item.itemCode}</span>
@@ -168,7 +201,7 @@ export default function InventoryPage() {
                       <td className="px-4 py-3 text-sm hidden sm:table-cell">
                         {item.outerDiameter}mm × {item.wallThickness}mm
                       </td>
-                      <td className="px-4 py-3 text-sm hidden sm:table-cell">{item.grade}</td>
+                      <td className="px-4 py-3 text-sm hidden sm:table-cell">{item.grade || 'N/A'}</td>
                       <td className="px-4 py-3 text-sm">
                         <span className={item.status === 'Out of Stock' ? 'text-danger font-medium' : ''}>
                           {item.stockQty} {item.unit}
@@ -211,7 +244,7 @@ export default function InventoryPage() {
           </div>
 
           {/* Pagination */}
-          {totalPages > 1 && (
+          {pagination.totalPages > 1 && (
             <div className="flex items-center justify-center gap-2 mt-4">
               <button
                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
@@ -221,11 +254,11 @@ export default function InventoryPage() {
                 Previous
               </button>
               <span className="text-sm text-muted">
-                Page {currentPage} of {totalPages}
+                Page {currentPage} of {pagination.totalPages}
               </span>
               <button
-                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
+                onClick={() => setCurrentPage(p => Math.min(pagination.totalPages, p + 1))}
+                disabled={currentPage === pagination.totalPages}
                 className="px-4 py-2 border border-border rounded-btn text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
               >
                 Next

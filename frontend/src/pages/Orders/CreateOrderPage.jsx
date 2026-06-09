@@ -1,20 +1,52 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, X } from 'lucide-react';
-import { mockCustomers, mockInventory } from '../../data/mockData';
+import toast from 'react-hot-toast';
+import { api } from '../../utils/api';
+import LoadingSpinner from '../../components/ui/LoadingSpinner';
 
 export default function CreateOrderPage() {
   const navigate = useNavigate();
+  const [customers, setCustomers] = useState([]);
+  const [inventory, setInventory] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [orderItems, setOrderItems] = useState([]);
   const [showItemPicker, setShowItemPicker] = useState(false);
-  const [expectedDelivery, setExpectedDelivery] = useState('');
   const [notes, setNotes] = useState('');
   const [status, setStatus] = useState('Pending');
 
+  useEffect(() => {
+    const fetchInitData = async () => {
+      try {
+        setLoading(true);
+        const [custRes, invRes] = await Promise.all([
+          api.get('/customers?limit=100'),
+          api.get('/inventory?limit=100')
+        ]);
+        if (custRes.success) setCustomers(custRes.data || []);
+        if (invRes.success) setInventory(invRes.data || []);
+      } catch (err) {
+        toast.error('Failed to load customers or stock items');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchInitData();
+  }, []);
+
   const addItem = (inventoryItem) => {
+    // Prevent duplicate items
+    if (orderItems.some(item => item.inventoryItem === inventoryItem.id)) {
+      toast.error('Item already added. Adjust quantity instead.');
+      setShowItemPicker(false);
+      return;
+    }
     const newItem = {
       id: Date.now(),
+      inventoryItem: inventoryItem.id,
       name: inventoryItem.name,
       qty: 1,
       unit: inventoryItem.unit,
@@ -51,21 +83,65 @@ export default function CreateOrderPage() {
   const sgst = taxableAmount * 0.09;
   const grandTotal = taxableAmount + cgst + sgst;
 
-  const formatCurrency = (value) => `₹${value.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+  const formatCurrency = (value) => new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 2,
+  }).format(value || 0);
 
-  const handleSubmit = () => {
+  const handleSubmit = async (isConfirm = false) => {
     if (!selectedCustomer) {
-      alert('Please select a customer');
+      toast.error('Please select a customer');
       return;
     }
     if (orderItems.length === 0) {
-      alert('Please add at least one item');
+      toast.error('Please add at least one item');
       return;
     }
-    // In real app, would save to backend
-    console.log('Creating order:', { selectedCustomer, orderItems, expectedDelivery, notes, status });
-    navigate('/orders');
+
+    try {
+      setSubmitting(true);
+      const payload = {
+        customer: selectedCustomer.id,
+        items: orderItems.map(item => ({
+          inventoryItem: item.inventoryItem,
+          quantity: parseFloat(item.qty),
+          unitPrice: parseFloat(item.unitPrice),
+          discount: parseFloat(item.discount) || 0
+        })),
+        discountAmount: 0,
+        notes: notes
+      };
+
+      const result = await api.post('/orders', payload);
+      if (result.success) {
+        const orderId = result.data.id;
+        
+        // If "Confirm Order" selected or status is Confirmed, call status change API
+        if (isConfirm || status === 'Confirmed') {
+          await api.patch(`/orders/${orderId}/status`, {
+            status: 'confirmed',
+            note: 'Order confirmed on creation'
+          });
+        }
+        
+        toast.success('Order saved successfully');
+        navigate('/orders');
+      }
+    } catch (error) {
+      toast.error(error.message || 'Failed to create order');
+    } finally {
+      setSubmitting(false);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="py-20 flex justify-center bg-white shadow-card rounded-card">
+        <LoadingSpinner />
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -86,21 +162,21 @@ export default function CreateOrderPage() {
             <h3 className="text-lg font-heading font-semibold text-[#1A1F2E] mb-4">1. Select Customer</h3>
             <select
               value={selectedCustomer?.id || ''}
-              onChange={(e) => setSelectedCustomer(mockCustomers.find(c => c.id === e.target.value))}
+              onChange={(e) => setSelectedCustomer(customers.find(c => c.id === e.target.value))}
               className="w-full px-3 py-2 border border-border rounded-btn text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
             >
               <option value="">Choose a customer...</option>
-              {mockCustomers.map(customer => (
+              {customers.map(customer => (
                 <option key={customer.id} value={customer.id}>
-                  {customer.name} - {customer.company}
+                  {customer.name} {customer.company ? `- ${customer.company}` : ''}
                 </option>
               ))}
             </select>
             {selectedCustomer && (
               <div className="mt-4 p-3 bg-primary-light rounded-btn">
                 <p className="text-sm font-medium">{selectedCustomer.name}</p>
-                <p className="text-xs text-muted">GST: {selectedCustomer.gstNumber}</p>
-                <p className="text-xs text-muted">Payment Terms: {selectedCustomer.paymentTerms}</p>
+                {selectedCustomer.gstNumber && <p className="text-xs text-muted">GST: {selectedCustomer.gstNumber}</p>}
+                <p className="text-xs text-muted">Payment Terms: {selectedCustomer.paymentTerms || '30 days'}</p>
               </div>
             )}
           </div>
@@ -111,7 +187,7 @@ export default function CreateOrderPage() {
               <h3 className="text-lg font-heading font-semibold text-[#1A1F2E]">2. Add Items</h3>
               <button
                 onClick={() => setShowItemPicker(!showItemPicker)}
-                className="flex items-center gap-2 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-btn text-sm"
+                className="flex items-center gap-2 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-btn text-sm font-medium"
               >
                 <Plus size={16} />
                 Add Item
@@ -119,16 +195,20 @@ export default function CreateOrderPage() {
             </div>
 
             {showItemPicker && (
-              <div className="mb-4 p-3 border border-border rounded-btn max-h-48 overflow-y-auto">
-                {mockInventory.filter(i => i.status !== 'Out of Stock').map(item => (
-                  <button
-                    key={item.id}
-                    onClick={() => addItem(item)}
-                    className="w-full text-left px-3 py-2 hover:bg-gray-50 rounded text-sm"
-                  >
-                    {item.name} - ₹{item.sellingPrice}/{item.unit}
-                  </button>
-                ))}
+              <div className="mb-4 p-3 border border-border rounded-btn max-h-48 overflow-y-auto bg-gray-50">
+                {inventory.filter(i => i.status !== 'Out of Stock').length === 0 ? (
+                  <p className="text-sm text-muted text-center py-2">No items in stock</p>
+                ) : (
+                  inventory.filter(i => i.status !== 'Out of Stock').map(item => (
+                    <button
+                      key={item.id}
+                      onClick={() => addItem(item)}
+                      className="w-full text-left px-3 py-2 hover:bg-white border-b border-gray-100 last:border-0 rounded text-sm block"
+                    >
+                      {item.name} - {formatCurrency(item.sellingPrice)}/{item.unit}
+                    </button>
+                  ))
+                )}
               </div>
             )}
 
@@ -151,7 +231,7 @@ export default function CreateOrderPage() {
                   <tbody>
                     {orderItems.map(item => (
                       <tr key={item.id} className="border-t border-border">
-                        <td className="px-2 py-2">{item.name}</td>
+                        <td className="px-2 py-2 font-medium">{item.name}</td>
                         <td className="px-2 py-2">
                           <input
                             type="number"
@@ -161,7 +241,7 @@ export default function CreateOrderPage() {
                             min="1"
                           />
                         </td>
-                        <td className="px-2 py-2">{item.unit}</td>
+                        <td className="px-2 py-2 text-muted">{item.unit}</td>
                         <td className="px-2 py-2">
                           <input
                             type="number"
@@ -205,18 +285,7 @@ export default function CreateOrderPage() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-[#1A1F2E] mb-1">
-                  Expected Delivery Date
-                </label>
-                <input
-                  type="date"
-                  value={expectedDelivery}
-                  onChange={(e) => setExpectedDelivery(e.target.value)}
-                  className="w-full px-3 py-2 border border-border rounded-btn text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-[#1A1F2E] mb-1">
-                  Notes
+                  Notes / Special Instructions
                 </label>
                 <textarea
                   value={notes}
@@ -264,30 +333,32 @@ export default function CreateOrderPage() {
 
             <div className="mb-4">
               <label className="block text-sm font-medium text-[#1A1F2E] mb-1">
-                Status
+                Initial Status
               </label>
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value)}
                 className="w-full px-3 py-2 border border-border rounded-btn text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
               >
-                <option>Pending</option>
-                <option>Confirmed</option>
+                <option value="Pending">Draft (Pending)</option>
+                <option value="Confirmed">Confirmed</option>
               </select>
             </div>
 
             <div className="space-y-2">
               <button
-                onClick={handleSubmit}
-                className="w-full px-4 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-btn text-sm font-medium"
+                onClick={() => handleSubmit(status === 'Confirmed')}
+                disabled={submitting}
+                className="w-full px-4 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-btn text-sm font-semibold active:scale-[0.98] transition-transform disabled:opacity-50"
               >
-                Confirm Order
+                {submitting ? 'Creating...' : 'Save Order'}
               </button>
               <button
                 onClick={() => navigate('/orders')}
-                className="w-full px-4 py-2.5 border border-border text-[#1A1F2E] rounded-btn text-sm font-medium hover:bg-gray-50"
+                disabled={submitting}
+                className="w-full px-4 py-2.5 border border-border text-[#1A1F2E] rounded-btn text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
               >
-                Save as Draft
+                Cancel
               </button>
             </div>
           </div>

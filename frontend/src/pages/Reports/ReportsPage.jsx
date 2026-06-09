@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Download } from 'lucide-react';
 import { AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { exportToCSV, formatDateForFilename, formatCurrencyForCSV } from '../../utils/exportCSV';
-
-const API_URL = 'http://localhost:5000/api/v1';
+import { api } from '../../utils/api';
 
 export default function ReportsPage() {
   const [activeTab, setActiveTab] = useState('revenue');
   const [dateRange, setDateRange] = useState('thisMonth');
   const [loading, setLoading] = useState(false);
+  const location = useLocation();
   
   // State for each report type
   const [revenueData, setRevenueData] = useState(null);
@@ -36,29 +37,29 @@ export default function ReportsPage() {
     switch (range) {
       case 'thisMonth':
         from = new Date(now.getFullYear(), now.getMonth(), 1);
-        to = now;
+        to = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
         break;
       case 'lastMonth':
         from = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-        to = new Date(now.getFullYear(), now.getMonth(), 0);
+        to = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
         break;
       case 'thisQuarter':
         const quarter = Math.floor(now.getMonth() / 3);
         from = new Date(now.getFullYear(), quarter * 3, 1);
-        to = now;
+        to = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
         break;
       case 'last6Months':
         from = new Date(now.getFullYear(), now.getMonth() - 6, 1);
-        to = now;
+        to = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
         break;
       default:
         from = new Date(now.getFullYear(), now.getMonth(), 1);
-        to = now;
+        to = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
     }
 
     return {
-      from: from.toISOString().split('T')[0],
-      to: to.toISOString().split('T')[0]
+      from: from.toISOString(),
+      to: to.toISOString()
     };
   };
 
@@ -66,22 +67,9 @@ export default function ReportsPage() {
   const fetchRevenueData = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
       const { from, to } = getDateRange(dateRange);
       
-      const response = await fetch(
-        `${API_URL}/reports/sales?startDate=${from}&endDate=${to}&period=month`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-
-      if (!response.ok) throw new Error('Failed to fetch revenue data');
-      
-      const result = await response.json();
+      const result = await api.get(`/reports/sales?startDate=${from}&endDate=${to}&period=month`);
       if (result.success) {
         setRevenueData(result.data);
         setSalesData(result.data); // Reuse for sales tab
@@ -97,18 +85,8 @@ export default function ReportsPage() {
   const fetchInventoryData = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
       
-      const response = await fetch(`${API_URL}/reports/inventory`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) throw new Error('Failed to fetch inventory data');
-      
-      const result = await response.json();
+      const result = await api.get('/reports/inventory');
       if (result.success) {
         setInventoryData(result.data);
       }
@@ -128,7 +106,7 @@ export default function ReportsPage() {
     } else if (activeTab === 'orders') {
       fetchRevenueData(); // Orders use sales data
     }
-  }, [activeTab, dateRange]);
+  }, [activeTab, dateRange, location.key]);
 
   // CSV Export handlers
   const exportRevenueCSV = () => {

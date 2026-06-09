@@ -14,9 +14,9 @@ const { body } = require("express-validator");
 
 // Validation rules
 const orderValidation = [
-  body("customer").isMongoId().withMessage("Valid customer ID is required"),
+  body("customer").isUUID().withMessage("Valid customer ID is required"),
   body("items").isArray({ min: 1 }).withMessage("At least one item is required"),
-  body("items.*.inventoryItem").isMongoId().withMessage("Valid inventory item ID is required"),
+  body("items.*.inventoryItem").isUUID().withMessage("Valid inventory item ID is required"),
   body("items.*.quantity").isFloat({ min: 0.001 }).withMessage("Quantity must be greater than 0"),
   body("items.*.unitPrice").isFloat({ min: 0 }).withMessage("Unit price must be a positive number"),
   body("items.*.discount").optional().isFloat({ min: 0, max: 100 }).withMessage("Discount must be between 0-100%"),

@@ -2,11 +2,33 @@ import { useSidebar } from "../../context/SidebarContext";
 import { Menu, Search, Bell, ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { api } from "../../utils/api";
 
 export default function TopNavbar() {
   const { toggleMobile } = useSidebar();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const navigate = useNavigate();
+
+  const userStr = localStorage.getItem("user");
+  const user = userStr ? JSON.parse(userStr) : null;
+  const userName = user?.name || "Admin User";
+  const initials = userName
+    .split(" ")
+    .map(n => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+
+  const handleLogout = async () => {
+    try {
+      await api.post("/auth/logout");
+    } catch (error) {
+      console.error("Logout API call failed, continuing with client-side cleanup", error);
+    }
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    navigate("/login");
+  };
 
   return (
     <header className="h-16 bg-white border-b border-[#E2E6EA] flex items-center
@@ -58,10 +80,10 @@ export default function TopNavbar() {
           >
             <div className="w-8 h-8 rounded-full bg-[#EBF1F8] text-[#1B3A5C]
                             flex items-center justify-center text-xs font-bold font-heading">
-              AD
+              {initials}
             </div>
             <span className="hidden sm:block text-sm font-medium text-[#1A1F2E]">
-              Admin User
+              {userName}
             </span>
             <ChevronDown size={14} className="hidden sm:block text-[#9AA3AE]" />
           </button>
@@ -84,7 +106,7 @@ export default function TopNavbar() {
                 </button>
                 <div className="my-1 border-t border-[#E2E6EA]" />
                 <button
-                  onClick={() => navigate("/login")}
+                  onClick={handleLogout}
                   className="w-full text-left px-4 py-2 text-sm text-[#DC2626]
                              hover:bg-[#FEF2F2] transition-colors"
                 >

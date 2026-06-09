@@ -1,23 +1,147 @@
-import { Link, useParams } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Check } from 'lucide-react';
+import toast from 'react-hot-toast';
 import StatusBadge from '../../components/ui/StatusBadge';
-import { mockOrders, mockCustomers } from '../../data/mockData';
+import LoadingSpinner from '../../components/ui/LoadingSpinner';
+import { api } from '../../utils/api';
 
 export default function OrderDetailPage() {
   const { id } = useParams();
-  const order = mockOrders.find(o => o.id === id);
-  const customer = mockCustomers.find(c => c.id === order?.customerId);
+  const navigate = useNavigate();
+  const [order, setOrder] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [generatingInvoice, setGeneratingInvoice] = useState(false);
+  const [selectedStatus, setSelectedStatus] = useState('');
 
-  if (!order) return <div>Order not found</div>;
+  const fetchOrderDetail = async () => {
+    try {
+      setLoading(true);
+      const result = await api.get(`/orders/${id}`);
+      if (result.success) {
+        setOrder(result.data);
+        setSelectedStatus(mapStatusLabel(result.data.status));
+      }
+    } catch (error) {
+      toast.error(error.message || 'Failed to fetch order details');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchOrderDetail();
+  }, [id]);
+
+  const mapStatusLabel = (status) => {
+    if (status === 'draft') return 'Pending';
+    return status.charAt(0).toUpperCase() + status.slice(1);
+  };
+
+  const labelToValueMap = {
+    'Pending': 'draft',
+    'Confirmed': 'confirmed',
+    'Dispatched': 'dispatched',
+    'Delivered': 'delivered',
+    'Cancelled': 'cancelled'
+  };
+
+  const statusSteps = ['Pending', 'Confirmed', 'Dispatched', 'Delivered'];
+
+  if (loading) {
+    return (
+      <div className="py-20 flex justify-center bg-white shadow-card rounded-card">
+        <LoadingSpinner />
+      </div>
+    );
+  }
+
+  if (!order) {
+    return (
+      <div className="bg-white shadow-card rounded-card p-8 text-center text-muted">
+        Order not found
+      </div>
+    );
+  }
+
+  const currentStepIndex = statusSteps.indexOf(mapStatusLabel(order.status));
 
   const formatCurrency = (value) => new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency: 'INR',
     maximumFractionDigits: 2,
-  }).format(value);
+  }).format(value || 0);
 
-  const statusSteps = ['Pending', 'Confirmed', 'Dispatched', 'Delivered'];
-  const currentStepIndex = statusSteps.indexOf(order.status);
+  const getNextTransitions = (status) => {
+    switch (status) {
+      case 'draft':
+        return ['Pending', 'Confirmed', 'Cancelled'];
+      case 'confirmed':
+        return ['Confirmed', 'Dispatched', 'Cancelled'];
+      case 'dispatched':
+        return ['Dispatched', 'Delivered'];
+      default:
+        return [mapStatusLabel(status)];
+    }
+  };
+
+  const handleUpdateStatus = async () => {
+    const backendStatus = labelToValueMap[selectedStatus];
+    if (backendStatus === order.status) return;
+
+    try {
+      setUpdatingStatus(true);
+      const result = await api.patch(`/orders/${id}/status`, {
+        status: backendStatus,
+        note: `Status updated to ${selectedStatus} via details panel`
+      });
+      if (result.success) {
+        toast.success(`Order status updated to ${selectedStatus}`);
+        fetchOrderDetail();
+      }
+    } catch (error) {
+      toast.error(error.message || 'Failed to update status');
+    } finally {
+      setUpdatingStatus(false);
+    }
+  };
+
+  const handleGenerateInvoice = async () => {
+    try {
+      setGeneratingInvoice(true);
+      const todayStr = new Date().toISOString().split('T')[0];
+      
+      const result = await api.post('/invoices', {
+        orderId: order.id,
+        dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days due
+        termsAndConditions: order.paymentTerms ? `Payment due within ${order.paymentTerms}` : 'Payment due within 30 days'
+      });
+      if (result.success) {
+        toast.success('Invoice generated successfully!');
+        navigate(`/invoices/${result.data.id}`);
+      }
+    } catch (error) {
+      toast.error(error.message || 'Failed to generate invoice');
+    } finally {
+      setGeneratingInvoice(false);
+    }
+  };
+
+  const customer = order.customer || {};
+  const items = order.items || [];
+  const addressString = [
+    customer.billingStreet,
+    customer.billingCity,
+    customer.billingState,
+    customer.billingPincode ? `- ${customer.billingPincode}` : ''
+  ].filter(Boolean).join(', ');
+
+  const orderDate = new Date(order.createdAt).toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
 
   return (
     <div>
@@ -28,35 +152,37 @@ export default function OrderDetailPage() {
         </Link>
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-2xl font-heading font-bold text-[#1A1F2E] font-mono">{order.id}</h2>
-            <p className="text-sm text-muted mt-1">Order Date: {order.orderDate}</p>
+            <h2 className="text-2xl font-heading font-bold text-[#1A1F2E] font-mono">{order.orderNumber}</h2>
+            <p className="text-sm text-muted mt-1">Order Date: {orderDate}</p>
           </div>
-          <StatusBadge status={order.status} />
+          <StatusBadge status={mapStatusLabel(order.status)} />
         </div>
       </div>
 
       {/* Status Timeline */}
-      <div className="bg-white shadow-card rounded-card p-6 mb-6">
-        <div className="flex items-center justify-between">
-          {statusSteps.map((step, index) => (
-            <div key={step} className="flex items-center flex-1">
-              <div className="flex flex-col items-center">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                  index <= currentStepIndex ? 'bg-success text-white' : 'bg-gray-200 text-gray-400'
-                }`}>
-                  {index < currentStepIndex ? <Check size={20} /> : index + 1}
+      {order.status !== 'cancelled' && (
+        <div className="bg-white shadow-card rounded-card p-6 mb-6">
+          <div className="flex items-center justify-between">
+            {statusSteps.map((step, index) => (
+              <div key={step} className="flex items-center flex-1">
+                <div className="flex flex-col items-center">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center font-heading font-bold ${
+                    index <= currentStepIndex ? 'bg-[#2E7D52] text-white' : 'bg-gray-200 text-gray-400'
+                  }`}>
+                    {index < currentStepIndex ? <Check size={20} /> : index + 1}
+                  </div>
+                  <p className="text-xs mt-2 font-medium">{step}</p>
                 </div>
-                <p className="text-xs mt-2 font-medium">{step}</p>
+                {index < statusSteps.length - 1 && (
+                  <div className={`flex-1 h-1 mx-2 ${
+                    index < currentStepIndex ? 'bg-[#2E7D52]' : 'bg-gray-200'
+                  }`} />
+                )}
               </div>
-              {index < statusSteps.length - 1 && (
-                <div className={`flex-1 h-1 mx-2 ${
-                  index < currentStepIndex ? 'bg-success' : 'bg-gray-200'
-                }`} />
-              )}
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column */}
@@ -65,11 +191,13 @@ export default function OrderDetailPage() {
           <div className="bg-white shadow-card rounded-card p-5">
             <h3 className="text-lg font-heading font-semibold text-[#1A1F2E] mb-3">Customer Information</h3>
             <div className="space-y-2 text-sm">
-              <p><span className="text-muted">Name:</span> <span className="font-medium">{customer?.name}</span></p>
-              <p><span className="text-muted">Company:</span> {customer?.company}</p>
-              <p><span className="text-muted">Phone:</span> {customer?.phone}</p>
-              <p><span className="text-muted">GST:</span> <span className="font-mono text-xs">{customer?.gstNumber}</span></p>
-              <p><span className="text-muted">Address:</span> {customer?.city}, {customer?.state} - {customer?.pincode}</p>
+              <p><span className="text-muted">Name:</span> <span className="font-medium">{customer.name || 'N/A'}</span></p>
+              {customer.company && <p><span className="text-muted">Company:</span> {customer.company}</p>}
+              <p><span className="text-muted">Phone:</span> {customer.phone}</p>
+              {customer.gstNumber && (
+                <p><span className="text-muted">GST:</span> <span className="font-mono text-xs">{customer.gstNumber}</span></p>
+              )}
+              {addressString && <p><span className="text-muted">Address:</span> {addressString}</p>}
             </div>
           </div>
 
@@ -89,11 +217,11 @@ export default function OrderDetailPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {order.items.map((item, index) => (
+                  {items.map((item, index) => (
                     <tr key={index} className="border-t border-border">
-                      <td className="px-3 py-2">{item.name}</td>
-                      <td className="px-3 py-2">{item.qty}</td>
-                      <td className="px-3 py-2">{item.unit}</td>
+                      <td className="px-3 py-2 font-medium">{item.itemName}</td>
+                      <td className="px-3 py-2">{item.quantity}</td>
+                      <td className="px-3 py-2 text-muted">{item.unit}</td>
                       <td className="px-3 py-2">{formatCurrency(item.unitPrice)}</td>
                       <td className="px-3 py-2">{item.discount}%</td>
                       <td className="px-3 py-2 font-medium">{formatCurrency(item.subtotal)}</td>
@@ -119,14 +247,24 @@ export default function OrderDetailPage() {
                     <span className="text-muted">Taxable Amount:</span>
                     <span>{formatCurrency(order.taxableAmount)}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted">CGST (9%):</span>
-                    <span>{formatCurrency(order.cgst)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted">SGST (9%):</span>
-                    <span>{formatCurrency(order.sgst)}</span>
-                  </div>
+                  {order.cgst > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted">CGST (9%):</span>
+                      <span>{formatCurrency(order.cgst)}</span>
+                    </div>
+                  )}
+                  {order.sgst > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted">SGST (9%):</span>
+                      <span>{formatCurrency(order.sgst)}</span>
+                    </div>
+                  )}
+                  {order.igst > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted">IGST (18%):</span>
+                      <span>{formatCurrency(order.igst)}</span>
+                    </div>
+                  )}
                   <div className="h-px bg-border my-2" />
                   <div className="flex justify-between text-lg font-heading font-bold">
                     <span>Grand Total:</span>
@@ -149,41 +287,49 @@ export default function OrderDetailPage() {
         {/* Right Column - Summary */}
         <div className="lg:col-span-1">
           <div className="bg-white shadow-card rounded-card p-5 space-y-4">
-            <h3 className="text-lg font-heading font-semibold text-[#1A1F2E]">Order Summary</h3>
+            <h3 className="text-lg font-heading font-semibold text-[#1A1F2E]">Actions</h3>
             
             <div className="space-y-3 text-sm">
               <div>
-                <p className="text-muted text-xs mb-1">Order Date</p>
-                <p className="font-medium">{order.orderDate}</p>
-              </div>
-              <div>
                 <p className="text-muted text-xs mb-1">Expected Delivery</p>
-                <p className="font-medium">{order.expectedDelivery}</p>
+                <p className="font-medium">
+                  {order.expectedDelivery 
+                    ? new Date(order.expectedDelivery).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                    : 'N/A'}
+                </p>
               </div>
               <div>
                 <p className="text-muted text-xs mb-1">Total Amount</p>
                 <p className="text-xl font-heading font-bold text-accent">{formatCurrency(order.grandTotal)}</p>
               </div>
-              <div>
-                <p className="text-muted text-xs mb-1">Payment Status</p>
-                <StatusBadge status={order.paymentStatus} />
-              </div>
             </div>
 
             <div className="pt-4 border-t border-border space-y-2">
-              <select className="w-full px-3 py-2 border border-border rounded-btn text-sm">
-                <option>{order.status}</option>
-                <option>Pending</option>
-                <option>Confirmed</option>
-                <option>Dispatched</option>
-                <option>Delivered</option>
+              <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1">Update Status</label>
+              <select
+                value={selectedStatus}
+                onChange={(e) => setSelectedStatus(e.target.value)}
+                className="w-full px-3 py-2 border border-border rounded-btn text-sm"
+                disabled={order.status === 'delivered' || order.status === 'cancelled' || updatingStatus}
+              >
+                {getNextTransitions(order.status).map(opt => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
               </select>
-              <button className="w-full px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-btn text-sm font-medium">
-                Update Status
+              <button
+                onClick={handleUpdateStatus}
+                disabled={order.status === 'delivered' || order.status === 'cancelled' || updatingStatus}
+                className="w-full px-4 py-2 bg-primary hover:bg-primary/95 text-white rounded-btn text-sm font-medium disabled:opacity-50"
+              >
+                {updatingStatus ? 'Updating...' : 'Update Status'}
               </button>
-              {(order.status === 'Confirmed' || order.status === 'Delivered') && (
-                <button className="w-full px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-btn text-sm font-medium">
-                  Generate Invoice
+              {order.status === 'delivered' && (
+                <button
+                  onClick={handleGenerateInvoice}
+                  disabled={generatingInvoice}
+                  className="w-full px-4 py-2 bg-accent hover:bg-accent/95 text-white rounded-btn text-sm font-medium disabled:opacity-50"
+                >
+                  {generatingInvoice ? 'Generating Invoice...' : 'Generate Invoice'}
                 </button>
               )}
             </div>

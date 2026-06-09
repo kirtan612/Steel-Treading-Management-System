@@ -5,6 +5,8 @@ import {
   Eye, EyeOff, ArrowRight, CheckCircle2,
   TrendingUp, Users, FileText, Shield
 } from "lucide-react";
+import { api } from "../../utils/api";
+import toast from "react-hot-toast";
 
 const FEATURES = [
   {
@@ -50,16 +52,30 @@ export default function LoginPage() {
     return errs;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const errs = validate();
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
     setErrors({});
     setLoading(true);
-    setTimeout(() => {
+    try {
+      const result = await api.post("/auth/login", {
+        email: form.email,
+        password: form.password,
+      });
+      if (result.success && result.data?.accessToken) {
+        localStorage.setItem("token", result.data.accessToken);
+        localStorage.setItem("user", JSON.stringify(result.data.user));
+        toast.success("Logged in successfully!");
+        navigate("/dashboard");
+      } else {
+        toast.error(result.message || "Invalid login response");
+      }
+    } catch (error) {
+      toast.error(error.message || "Invalid email or password");
+    } finally {
       setLoading(false);
-      navigate("/dashboard");
-    }, 1200);
+    }
   };
 
   const handleChange = (field) => (e) => {

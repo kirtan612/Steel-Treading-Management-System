@@ -1,19 +1,24 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { mockInventory } from "../../data/mockData";
+import toast from "react-hot-toast";
 import { validators, validateForm } from "../../utils/validators";
 import { FormField, NumberInput, inputClass } from "../../components/ui/FormField";
 import { ArrowLeft, Save } from "lucide-react";
+import { api } from "../../utils/api";
 
 const PIPE_TYPES = ["ERW", "Seamless", "Hollow Section", "GI Pipe", "MS Pipe"];
-const GRADES = ["IS 1239", "IS 3589", "IS 4923", "ASTM A53", "ASTM A106", "EN 10255"];
-const UNITS = ["Kg", "Ton", "Piece", "Meter"];
+const GRADES = ["FE410", "A53 Gr.B", "IS 1239", "IS 3589", "IS 4923", "ASTM A53", "ASTM A106", "EN 10255"];
+const UNITS = [
+  { value: "kg", label: "kg" },
+  { value: "mt", label: "mt" },
+  { value: "pcs", label: "pcs" }
+];
 
 const EMPTY_FORM = {
   name: "", pipeType: "", grade: "",
   outerDiameter: "", wallThickness: "", lengthPerPiece: "6",
   weightPerMeter: "",
-  unit: "Kg", stockQty: "", reorderLevel: "",
+  unit: "kg", stockQty: "", reorderLevel: "",
   purchasePrice: "", sellingPrice: "",
   hsnCode: "", location: "", description: "",
 };
@@ -27,11 +32,36 @@ export default function InventoryFormPage() {
   const [errors, setErrors] = useState({});
   const [submitted, setSubmitted] = useState(false);
 
-  // Pre-fill on edit
+  // Fetch on edit
   useEffect(() => {
     if (isEdit) {
-      const item = mockInventory.find(i => i.id === id);
-      if (item) setForm({ ...EMPTY_FORM, ...item });
+      const fetchItem = async () => {
+        try {
+          const result = await api.get(`/inventory/${id}`);
+          if (result.success) {
+            setForm({
+              name: result.data.name || "",
+              pipeType: result.data.pipeType || "",
+              grade: result.data.grade || "",
+              outerDiameter: result.data.outerDiameter ? String(result.data.outerDiameter) : "",
+              wallThickness: result.data.wallThickness ? String(result.data.wallThickness) : "",
+              lengthPerPiece: result.data.lengthPerPiece ? String(result.data.lengthPerPiece) : "6",
+              weightPerMeter: result.data.weightPerMeter ? String(result.data.weightPerMeter) : "",
+              unit: result.data.unit || "kg",
+              stockQty: result.data.stockQty ? String(result.data.stockQty) : "",
+              reorderLevel: result.data.reorderLevel ? String(result.data.reorderLevel) : "",
+              purchasePrice: result.data.purchasePrice ? String(result.data.purchasePrice) : "",
+              sellingPrice: result.data.sellingPrice ? String(result.data.sellingPrice) : "",
+              hsnCode: result.data.hsnCode || "",
+              location: result.data.location || "",
+              description: result.data.description || ""
+            });
+          }
+        } catch (error) {
+          toast.error(error.message || 'Failed to load item details');
+        }
+      };
+      fetchItem();
     }
   }, [id, isEdit]);
 
@@ -56,7 +86,7 @@ export default function InventoryFormPage() {
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitted(true);
 
@@ -86,8 +116,41 @@ export default function InventoryFormPage() {
       return;
     }
 
-    console.log("Saving inventory item:", form);
-    navigate("/inventory");
+    try {
+      const payload = {
+        name: form.name,
+        pipeType: form.pipeType,
+        grade: form.grade,
+        outerDiameter: parseFloat(form.outerDiameter),
+        wallThickness: parseFloat(form.wallThickness),
+        lengthPerPiece: form.lengthPerPiece ? parseFloat(form.lengthPerPiece) : 6,
+        weightPerMeter: form.weightPerMeter ? parseFloat(form.weightPerMeter) : undefined,
+        unit: form.unit,
+        stockQty: parseFloat(form.stockQty),
+        reorderLevel: parseFloat(form.reorderLevel),
+        purchasePrice: parseFloat(form.purchasePrice),
+        sellingPrice: parseFloat(form.sellingPrice),
+        hsnCode: form.hsnCode || undefined,
+        location: form.location || undefined,
+        description: form.description || undefined
+      };
+
+      let result;
+      if (isEdit) {
+        result = await api.put(`/inventory/${id}`, payload);
+      } else {
+        result = await api.post("/inventory", payload);
+      }
+
+      if (result.success) {
+        toast.success(isEdit ? "Item updated successfully" : "Item created successfully");
+        navigate("/inventory");
+      } else {
+        toast.error(result.message || "An error occurred");
+      }
+    } catch (error) {
+      toast.error(error.message || "Failed to save item");
+    }
   };
 
   // Helper to render field container with error
@@ -197,7 +260,7 @@ export default function InventoryFormPage() {
               <Field label="Unit" field="unit" required>
                 <select value={form.unit} onChange={set("unit")}
                         className={inputClass(errors.unit)}>
-                  {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                  {UNITS.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
                 </select>
               </Field>
               <Field label="Stock Quantity" field="stockQty" required>

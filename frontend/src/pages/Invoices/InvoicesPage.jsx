@@ -1,33 +1,67 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { Eye, Download, FileText } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import StatusBadge from '../../components/ui/StatusBadge';
 import EmptyState from '../../components/ui/EmptyState';
-import { mockInvoices } from '../../data/mockData';
+import LoadingSpinner from '../../components/ui/LoadingSpinner';
+import { api } from '../../utils/api';
 
 export default function InvoicesPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [invoices, setInvoices] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('All');
 
-  const filteredInvoices = statusFilter === 'All' 
-    ? mockInvoices 
-    : mockInvoices.filter(inv => inv.status === statusFilter);
+  const fetchInvoices = async () => {
+    try {
+      setLoading(true);
+      const result = await api.get('/invoices?limit=100');
+      if (result.success) {
+        setInvoices(result.data.invoices || []);
+      }
+    } catch (error) {
+      toast.error(error.message || 'Failed to fetch invoices');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchInvoices();
+  }, [location.key]);
+
+  const getInvoiceStatus = (inv) => {
+    const status = inv.status?.toLowerCase() || '';
+    if (status === 'paid') return 'Paid';
+    if (status === 'partial') return 'Partial';
+    
+    const isOverdue = new Date(inv.dueDate) < new Date();
+    if (isOverdue && status !== 'paid') return 'Overdue';
+    
+    return 'Unpaid';
+  };
+
+  const statusCounts = {
+    'All': invoices.length,
+    'Paid': invoices.filter(i => getInvoiceStatus(i) === 'Paid').length,
+    'Partial': invoices.filter(i => getInvoiceStatus(i) === 'Partial').length,
+    'Unpaid': invoices.filter(i => getInvoiceStatus(i) === 'Unpaid').length,
+    'Overdue': invoices.filter(i => getInvoiceStatus(i) === 'Overdue').length,
+  };
+
+  const filteredInvoices = invoices.filter(inv => {
+    const invStatus = getInvoiceStatus(inv);
+    return statusFilter === 'All' || invStatus === statusFilter;
+  });
 
   const formatCurrency = (value) => new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency: 'INR',
     maximumFractionDigits: 2,
-  }).format(value);
-
-  const statusCounts = {
-    'All': mockInvoices.length,
-    'Paid': mockInvoices.filter(i => i.status === 'Paid').length,
-    'Partial': mockInvoices.filter(i => i.status === 'Partial').length,
-    'Unpaid': mockInvoices.filter(i => i.status === 'Unpaid').length,
-    'Overdue': mockInvoices.filter(i => i.status === 'Overdue').length,
-  };
+  }).format(value || 0);
 
   return (
     <div>
@@ -39,10 +73,10 @@ export default function InvoicesPage() {
           <div key={status} className="bg-white shadow-card rounded-card p-4">
             <div className="flex items-center gap-2 mb-1">
               <div className={`w-2 h-2 rounded-full ${
-                status === 'Paid' ? 'bg-success' :
-                status === 'Partial' ? 'bg-warning' :
-                status === 'Unpaid' ? 'bg-danger' :
-                status === 'Overdue' ? 'bg-danger' : 'bg-primary'
+                status === 'Paid' ? 'bg-[#2E7D52]' :
+                status === 'Partial' ? 'bg-[#D97706]' :
+                status === 'Unpaid' ? 'bg-[#DC2626]' :
+                status === 'Overdue' ? 'bg-[#DC2626]' : 'bg-primary'
               }`} />
               <p className="text-xs text-muted">{status}</p>
             </div>
@@ -71,12 +105,16 @@ export default function InvoicesPage() {
       </div>
 
       {/* Table */}
-      {filteredInvoices.length === 0 ? (
+      {loading ? (
+        <div className="py-20 bg-white shadow-card rounded-card flex justify-center">
+          <LoadingSpinner />
+        </div>
+      ) : filteredInvoices.length === 0 ? (
         <div className="bg-white shadow-card rounded-card">
           <EmptyState 
             icon={FileText}
             title={statusFilter !== 'All' ? "No invoices found" : "No invoices yet"}
-            message={statusFilter !== 'All' ? "No invoices match your current filter" : "Invoices will appear here once orders are confirmed"}
+            message={statusFilter !== 'All' ? "No invoices match your current filter" : "Invoices will appear here once orders are confirmed and fulfilled"}
             actionLabel={statusFilter !== 'All' ? "Clear Filter" : null}
             onAction={statusFilter !== 'All' ? () => setStatusFilter('All') : null}
           />
@@ -100,52 +138,61 @@ export default function InvoicesPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredInvoices.map((invoice) => (
-                  <tr key={invoice.id} className="border-t border-border hover:bg-[#F7F8FA]">
-                    <td className="px-4 py-3">
-                      <button
-                        onClick={() => navigate(`/invoices/${invoice.id}`)}
-                        className="font-mono text-xs text-accent hover:underline"
-                      >
-                        {invoice.id}
-                      </button>
-                    </td>
-                    <td className="px-4 py-3 text-sm">{invoice.customerName}</td>
-                    <td className="px-4 py-3 hidden md:table-cell">
-                      <span className="font-mono text-xs text-muted">{invoice.orderId}</span>
-                    </td>
-                    <td className="px-4 py-3 text-sm hidden sm:table-cell">{invoice.issueDate}</td>
-                    <td className="px-4 py-3 text-sm hidden lg:table-cell">{invoice.dueDate}</td>
-                    <td className="px-4 py-3 text-sm font-medium">{formatCurrency(invoice.grandTotal)}</td>
-                    <td className="px-4 py-3 text-sm hidden md:table-cell">{formatCurrency(invoice.amountPaid)}</td>
-                    <td className="px-4 py-3 text-sm hidden sm:table-cell">
-                      <span className={invoice.balance > 0 ? 'text-danger font-medium' : ''}>
-                        {formatCurrency(invoice.balance)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <StatusBadge status={invoice.status} />
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => navigate(`/invoices/${invoice.id}`)}
-                          className="text-primary hover:text-primary-hover"
-                          title="View"
+                {filteredInvoices.map((invoice) => {
+                  const issueDateStr = new Date(invoice.issueDate).toLocaleDateString('en-IN', {
+                    day: '2-digit',
+                    month: 'short',
+                    year: 'numeric',
+                  });
+                  const dueDateStr = new Date(invoice.dueDate).toLocaleDateString('en-IN', {
+                    day: '2-digit',
+                    month: 'short',
+                    year: 'numeric',
+                  });
+                  return (
+                    <tr key={invoice.id} className="border-t border-border hover:bg-[#F7F8FA]">
+                      <td className="px-4 py-3">
+                        <Link
+                          to={`/invoices/${invoice.id}`}
+                          className="font-mono text-xs text-accent hover:underline font-bold"
                         >
-                          <Eye size={16} />
-                        </button>
-                        <button
-                          onClick={() => toast.info('PDF download available on invoice detail page')}
-                          className="text-muted hover:text-[#1A1F2E] hidden sm:inline-block"
-                          title="Download"
-                        >
-                          <Download size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                          {invoice.invoiceNumber}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3 text-sm">{invoice.customer?.name || 'N/A'}</td>
+                      <td className="px-4 py-3 hidden md:table-cell">
+                        {invoice.order ? (
+                          <Link to={`/orders/${invoice.order.id}`} className="font-mono text-xs text-accent hover:underline">
+                            {invoice.order.orderNumber}
+                          </Link>
+                        ) : 'N/A'}
+                      </td>
+                      <td className="px-4 py-3 text-sm hidden sm:table-cell">{issueDateStr}</td>
+                      <td className="px-4 py-3 text-sm hidden lg:table-cell">{dueDateStr}</td>
+                      <td className="px-4 py-3 text-sm font-medium">{formatCurrency(invoice.grandTotal)}</td>
+                      <td className="px-4 py-3 text-sm hidden md:table-cell">{formatCurrency(invoice.amountPaid)}</td>
+                      <td className="px-4 py-3 text-sm hidden sm:table-cell">
+                        <span className={invoice.balance > 0 ? 'text-danger font-medium' : ''}>
+                          {formatCurrency(invoice.balance)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <StatusBadge status={getInvoiceStatus(invoice)} />
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => navigate(`/invoices/${invoice.id}`)}
+                            className="text-primary hover:text-primary-hover"
+                            title="View"
+                          >
+                            <Eye size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

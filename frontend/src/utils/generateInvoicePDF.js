@@ -1,5 +1,5 @@
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 /**
  * Formats a number as Indian currency
@@ -144,7 +144,7 @@ export const generateInvoicePDF = (invoice) => {
     formatCurrency(item.amount || 0),
   ]) || [];
 
-  doc.autoTable({
+  autoTable(doc, {
     startY: yPos,
     head: [['#', 'Description', 'Qty', 'Unit', 'Rate', 'Amount']],
     body: tableData,

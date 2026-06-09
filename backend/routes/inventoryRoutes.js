@@ -17,7 +17,7 @@ const inventoryValidation = [
   body("pipeType").isIn(["ERW", "Seamless", "GI Pipe", "Hollow Section", "MS Pipe"]).withMessage("Invalid pipe type"),
   body("outerDiameter").isFloat({ min: 0 }).withMessage("Outer diameter must be a positive number"),
   body("wallThickness").isFloat({ min: 0 }).withMessage("Wall thickness must be a positive number"),
-  body("unit").isIn(["kg", "mt", "pcs"]).withMessage("Unit must be kg, mt, or pcs"),
+  body("unit").isIn(["Kg", "Ton", "Piece", "Meter"]).withMessage("Unit must be Kg, Ton, Piece, or Meter"),
   body("stockQty").isFloat({ min: 0 }).withMessage("Stock quantity must be a positive number"),
   body("reorderLevel").isFloat({ min: 0 }).withMessage("Reorder level must be a positive number"),
   body("purchasePrice").isFloat({ min: 0 }).withMessage("Purchase price must be a positive number"),
@@ -199,7 +199,7 @@ router.get("/:id", getInventoryItem);
  *       403:
  *         description: Insufficient role
  */
-router.post("/", authorize("admin", "inventory"), inventoryValidation, createInventoryItem);
+router.post("/", authorize("admin", "sales"), inventoryValidation, createInventoryItem);
 
 /**
  * @swagger
@@ -252,7 +252,7 @@ router.post("/", authorize("admin", "inventory"), inventoryValidation, createInv
  *       200:
  *         description: Updated inventory item
  */
-router.put("/:id", authorize("admin", "inventory"), inventoryValidation, updateInventoryItem);
+router.put("/:id", authorize("admin", "sales"), inventoryValidation, updateInventoryItem);
 
 /**
  * @swagger

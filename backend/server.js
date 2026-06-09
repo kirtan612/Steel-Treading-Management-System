@@ -10,7 +10,6 @@ const morgan = require("morgan");
 const cookieParser = require("cookie-parser");
 const rateLimit = require("express-rate-limit");
 const compression = require("compression");
-const mongoSanitize = require("express-mongo-sanitize");
 const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./config/swagger");
 const { connectDB } = require("./config/database");
@@ -51,7 +50,11 @@ app.use(helmet({
   crossOriginResourcePolicy: false,
 }));
 app.use(cors({
-  origin: [process.env.CLIENT_URL, `http://localhost:${process.env.PORT || 5000}`],
+  origin: (origin, callback) => {
+    const allowed = [process.env.CLIENT_URL, 'http://localhost:5173', 'http://localhost:5174', `http://localhost:${process.env.PORT || 5000}`];
+    if (!origin || allowed.includes(origin)) return callback(null, true);
+    callback(new Error('Not allowed by CORS'));
+  },
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
 }));
@@ -72,18 +75,6 @@ const generalLimiter = rateLimit({
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 app.use(cookieParser());
-
-// Input sanitization - prevents injection attacks
-// Sanitize body and params but skip query to avoid read-only property errors
-app.use(mongoSanitize({
-  replaceWith: '_',
-  allowDots: true,
-  onSanitize: ({ req, key }) => {
-    if (process.env.NODE_ENV === 'development') {
-      console.warn(`⚠️  Sanitized suspicious input in ${req.method} ${req.path}: ${key}`);
-    }
-  },
-}));
 
 // Response compression for bandwidth optimization
 app.use(compression());
