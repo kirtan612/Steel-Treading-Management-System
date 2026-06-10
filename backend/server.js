@@ -8,7 +8,6 @@ const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
 const cookieParser = require("cookie-parser");
-const rateLimit = require("express-rate-limit");
 const compression = require("compression");
 const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./config/swagger");
@@ -59,18 +58,6 @@ app.use(cors({
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
 }));
 
-// Rate limiting — stricter on auth routes
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 20,
-  message: { success: false, message: "Too many attempts, please try again after 15 minutes" },
-});
-const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 200,
-  message: { success: false, message: "Too many requests" },
-});
-
 // Parsers - reduced limit for security (1MB is sufficient for ERP operations)
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
@@ -101,12 +88,12 @@ app.get("/api/health", (req, res) => {
 });
 
 // Routes
-app.use("/api/v1/auth",      authLimiter,   authRoutes);
-app.use("/api/v1/inventory", generalLimiter, inventoryRoutes);
-app.use("/api/v1/customers", generalLimiter, customerRoutes);
-app.use("/api/v1/orders",    generalLimiter, orderRoutes);
-app.use("/api/v1/invoices",  generalLimiter, invoiceRoutes);
-app.use("/api/v1/reports",   generalLimiter, reportRoutes);
+app.use("/api/v1/auth",      authRoutes);
+app.use("/api/v1/inventory", inventoryRoutes);
+app.use("/api/v1/customers", customerRoutes);
+app.use("/api/v1/orders",    orderRoutes);
+app.use("/api/v1/invoices",  invoiceRoutes);
+app.use("/api/v1/reports",   reportRoutes);
 
 // 404 handler
 app.use((req, res) => {
