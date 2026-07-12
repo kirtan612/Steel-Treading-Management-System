@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Package, Users, ShoppingCart,
   FileText, BarChart3, Settings, LogOut,
-  ChevronLeft, ChevronRight, Layers
+  ChevronLeft, ChevronRight, Layers, Truck
 } from "lucide-react";
 import { useSidebar } from "../../context/SidebarContext";
 
@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { path: "/inventory",  label: "Inventory",  icon: Package },
   { path: "/customers",  label: "Customers",  icon: Users },
   { path: "/orders",     label: "Orders",     icon: ShoppingCart },
+  { path: "/delivery-challans", label: "Delivery Challans", icon: Truck },
   { path: "/invoices",   label: "Invoices",   icon: FileText },
   { path: "/reports",    label: "Reports",    icon: BarChart3 },
 ];

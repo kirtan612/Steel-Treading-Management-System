@@ -24,6 +24,7 @@ const customerRoutes  = require("./routes/customerRoutes");
 const orderRoutes     = require("./routes/orderRoutes");
 const invoiceRoutes   = require("./routes/invoiceRoutes");
 const reportRoutes    = require("./routes/reportRoutes");
+const deliveryChallanRoutes = require("./routes/deliveryChallanRoutes");
 
 // Connect to PostgreSQL
 connectDB();
@@ -94,6 +95,7 @@ app.use("/api/v1/customers", customerRoutes);
 app.use("/api/v1/orders",    orderRoutes);
 app.use("/api/v1/invoices",  invoiceRoutes);
 app.use("/api/v1/reports",   reportRoutes);
+app.use("/api/v1/delivery-challans", deliveryChallanRoutes);
 
 // 404 handler
 app.use((req, res) => {

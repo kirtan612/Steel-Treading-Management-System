@@ -4,7 +4,8 @@ const {
   getCustomer,
   createCustomer,
   updateCustomer,
-  deleteCustomer
+  deleteCustomer,
+  getCustomerLedger
 } = require("../controllers/customerController");
 const { protect } = require("../middleware/authMiddleware");
 const { authorize } = require("../middleware/roleMiddleware");
@@ -113,6 +114,26 @@ router.get("/", getCustomers);
  *                               type: number
  */
 router.get("/:id", getCustomer);
+
+/**
+ * @swagger
+ * /api/v1/customers/{id}/ledger:
+ *   get:
+ *     tags: [Customers]
+ *     summary: Get customer ledger with financial summary, invoice history, and payment history
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Customer ledger data
+ */
+router.get("/:id/ledger", getCustomerLedger);
 
 /**
  * @swagger

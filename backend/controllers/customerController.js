@@ -270,10 +270,95 @@ const deleteCustomer = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
+// GET /api/v1/customers/:id/ledger
+const getCustomerLedger = async (req, res, next) => {
+  try {
+    const { Invoice } = require("../models");
+    
+    const customer = await Customer.findOne({
+      where: { id: req.params.id, isDeleted: false }
+    });
+    
+    if (!customer) {
+      return res.status(404).json({ success: false, message: "Customer not found" });
+    }
+
+    // Get all invoices for this customer
+    const invoices = await Invoice.findAll({
+      where: { customerId: customer.id },
+      order: [['issueDate', 'DESC']],
+      attributes: [
+        'id', 'invoiceNumber', 'orderId', 'issueDate', 'dueDate', 
+        'grandTotal', 'amountPaid', 'status', 'payments'
+      ]
+    });
+
+    // Calculate financial summary
+    const totalPurchases = invoices.reduce((sum, inv) => sum + parseFloat(inv.grandTotal || 0), 0);
+    const totalPaid = invoices.reduce((sum, inv) => sum + parseFloat(inv.amountPaid || 0), 0);
+    const outstandingBalance = totalPurchases - totalPaid;
+
+    // Extract payment history from all invoices
+    const paymentHistory = [];
+    invoices.forEach(invoice => {
+      if (invoice.payments && Array.isArray(invoice.payments)) {
+        invoice.payments.forEach(payment => {
+          paymentHistory.push({
+            id: payment.id || `${invoice.id}-${payment.date}`,
+            invoiceNumber: invoice.invoiceNumber,
+            invoiceId: invoice.id,
+            date: payment.date,
+            amount: parseFloat(payment.amount || 0),
+            method: payment.method,
+            reference: payment.reference || null
+          });
+        });
+      }
+    });
+
+    // Sort payment history by date descending
+    paymentHistory.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    // Calculate credit utilization
+    const creditLimit = parseFloat(customer.creditLimit || 0);
+    const creditUsed = outstandingBalance;
+    const creditAvailable = Math.max(0, creditLimit - creditUsed);
+    const creditUtilization = creditLimit > 0 ? (creditUsed / creditLimit) * 100 : 0;
+
+    res.json({
+      success: true,
+      data: {
+        summary: {
+          totalPurchases: parseFloat(totalPurchases.toFixed(2)),
+          totalPaid: parseFloat(totalPaid.toFixed(2)),
+          outstandingBalance: parseFloat(outstandingBalance.toFixed(2)),
+          creditLimit,
+          creditUsed: parseFloat(creditUsed.toFixed(2)),
+          creditAvailable: parseFloat(creditAvailable.toFixed(2)),
+          creditUtilization: parseFloat(creditUtilization.toFixed(2))
+        },
+        invoices: invoices.map(inv => ({
+          id: inv.id,
+          invoiceNumber: inv.invoiceNumber,
+          orderId: inv.orderId,
+          issueDate: inv.issueDate,
+          dueDate: inv.dueDate,
+          amount: parseFloat(inv.grandTotal),
+          paid: parseFloat(inv.amountPaid),
+          balance: parseFloat((inv.grandTotal - inv.amountPaid).toFixed(2)),
+          status: inv.status
+        })),
+        paymentHistory
+      }
+    });
+  } catch (error) { next(error); }
+};
+
 module.exports = {
   getCustomers,
   getCustomer,
   createCustomer,
   updateCustomer,
-  deleteCustomer
+  deleteCustomer,
+  getCustomerLedger
 };

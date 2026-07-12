@@ -13,6 +13,9 @@ const CustomerDetailPage = lazy(() => import("../pages/Customers/CustomerDetailP
 const OrdersPage = lazy(() => import("../pages/Orders/OrdersPage"));
 const CreateOrderPage = lazy(() => import("../pages/Orders/CreateOrderPage"));
 const OrderDetailPage = lazy(() => import("../pages/Orders/OrderDetailPage"));
+const DeliveryChallansPage = lazy(() => import("../pages/DeliveryChallans/DeliveryChallansPage"));
+const CreateDeliveryChallanPage = lazy(() => import("../pages/DeliveryChallans/CreateDeliveryChallanPage"));
+const DeliveryChallanDetailPage = lazy(() => import("../pages/DeliveryChallans/DeliveryChallanDetailPage"));
 const InvoicesPage = lazy(() => import("../pages/Invoices/InvoicesPage"));
 const InvoiceDetailPage = lazy(() => import("../pages/Invoices/InvoiceDetailPage"));
 const ReportsPage = lazy(() => import("../pages/Reports/ReportsPage"));
@@ -101,6 +104,30 @@ const router = createBrowserRouter([
         element: (
           <Suspense fallback={<LoadingSpinner />}>
             <OrderDetailPage />
+          </Suspense>
+        ) 
+      },
+      { 
+        path: "delivery-challans", 
+        element: (
+          <Suspense fallback={<LoadingSpinner />}>
+            <DeliveryChallansPage />
+          </Suspense>
+        ) 
+      },
+      { 
+        path: "delivery-challans/create", 
+        element: (
+          <Suspense fallback={<LoadingSpinner />}>
+            <CreateDeliveryChallanPage />
+          </Suspense>
+        ) 
+      },
+      { 
+        path: "delivery-challans/:id", 
+        element: (
+          <Suspense fallback={<LoadingSpinner />}>
+            <DeliveryChallanDetailPage />
           </Suspense>
         ) 
       },

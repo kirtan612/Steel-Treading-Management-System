@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Mail, Phone, MapPin } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, MapPin, FileText, X, CreditCard, Receipt } from 'lucide-react';
 import toast from 'react-hot-toast';
 import StatusBadge from '../../components/ui/StatusBadge';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
@@ -10,6 +10,9 @@ export default function CustomerDetailPage() {
   const { id } = useParams();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [ledgerOpen, setLedgerOpen] = useState(false);
+  const [ledgerData, setLedgerData] = useState(null);
+  const [ledgerLoading, setLedgerLoading] = useState(false);
 
   useEffect(() => {
     const fetchCustomerDetail = async () => {
@@ -27,6 +30,21 @@ export default function CustomerDetailPage() {
     };
     fetchCustomerDetail();
   }, [id]);
+
+  const fetchLedger = async () => {
+    try {
+      setLedgerLoading(true);
+      const result = await api.get(`/customers/${id}/ledger`);
+      if (result.success) {
+        setLedgerData(result.data);
+        setLedgerOpen(true);
+      }
+    } catch (error) {
+      toast.error(error.message || 'Failed to fetch customer ledger');
+    } finally {
+      setLedgerLoading(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -77,8 +95,22 @@ export default function CustomerDetailPage() {
           <ArrowLeft size={16} />
           Back to Customers
         </Link>
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-heading font-bold text-[#1A1F2E]">{customer.name}</h2>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <h2 className="text-xl sm:text-2xl font-heading font-bold text-[#1A1F2E]">{customer.name}</h2>
+          <button
+            onClick={fetchLedger}
+            disabled={ledgerLoading}
+            className="w-full sm:w-auto px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 flex items-center justify-center gap-2 text-sm"
+          >
+            {ledgerLoading ? (
+              <LoadingSpinner size="sm" />
+            ) : (
+              <>
+                <FileText size={16} />
+                View Ledger
+              </>
+            )}
+          </button>
         </div>
       </div>
 
@@ -186,6 +218,215 @@ export default function CustomerDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Ledger Modal */}
+      {ledgerOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] overflow-hidden">
+            {/* Modal Header */}
+            <div className="p-6 border-b border-border flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-heading font-bold text-[#1A1F2E]">Customer Ledger</h3>
+                <p className="text-muted text-sm">{customer?.name}</p>
+              </div>
+              <button
+                onClick={() => setLedgerOpen(false)}
+                className="p-2 hover:bg-[#F7F8FA] rounded-lg"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
+              {!ledgerData ? (
+                <div className="flex justify-center py-8">
+                  <LoadingSpinner />
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Financial Summary */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <p className="text-sm text-blue-600 mb-1">Total Purchase Amount</p>
+                      <p className="text-xl font-bold text-blue-800">{formatCurrency(ledgerData.summary.totalPurchases)}</p>
+                    </div>
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                      <p className="text-sm text-green-600 mb-1">Total Paid</p>
+                      <p className="text-xl font-bold text-green-800">{formatCurrency(ledgerData.summary.totalPaid)}</p>
+                    </div>
+                    <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                      <p className="text-sm text-orange-600 mb-1">Outstanding Balance</p>
+                      <p className="text-xl font-bold text-orange-800">{formatCurrency(ledgerData.summary.outstandingBalance)}</p>
+                    </div>
+                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                      <p className="text-sm text-purple-600 mb-1">Credit Available</p>
+                      <p className="text-xl font-bold text-purple-800">{formatCurrency(ledgerData.summary.creditAvailable)}</p>
+                    </div>
+                  </div>
+
+                  {/* Credit Summary */}
+                  {ledgerData.summary.creditLimit > 0 && (
+                    <div className="bg-white border border-border rounded-lg p-4">
+                      <h4 className="text-lg font-semibold text-[#1A1F2E] mb-3">Credit Summary</h4>
+                      <div className="space-y-3">
+                        <div className="flex justify-between text-sm">
+                          <span>Credit Limit</span>
+                          <span className="font-medium">{formatCurrency(ledgerData.summary.creditLimit)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span>Credit Used</span>
+                          <span className="font-medium">{formatCurrency(ledgerData.summary.creditUsed)}</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div 
+                            className={`h-2 rounded-full ${ledgerData.summary.creditUtilization > 80 ? 'bg-red-500' : ledgerData.summary.creditUtilization > 60 ? 'bg-orange-500' : 'bg-green-500'}`}
+                            style={{ width: `${Math.min(100, ledgerData.summary.creditUtilization)}%` }}
+                          ></div>
+                        </div>
+                        <div className="flex justify-between text-xs text-muted">
+                          <span>Utilization: {ledgerData.summary.creditUtilization.toFixed(1)}%</span>
+                          <span>Available: {formatCurrency(ledgerData.summary.creditAvailable)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Invoice History */}
+                  <div className="bg-white border border-border rounded-lg p-4">
+                    <h4 className="text-lg font-semibold text-[#1A1F2E] mb-4 flex items-center gap-2">
+                      <Receipt size={20} />
+                      Invoice History
+                    </h4>
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[640px]">
+                        <thead className="bg-[#F7F8FA]">
+                          <tr>
+                            <th className="text-left text-xs font-medium text-muted px-3 py-2">Invoice #</th>
+                            <th className="text-left text-xs font-medium text-muted px-3 py-2">Date</th>
+                            <th className="text-left text-xs font-medium text-muted px-3 py-2">Due Date</th>
+                            <th className="text-right text-xs font-medium text-muted px-3 py-2">Amount</th>
+                            <th className="text-right text-xs font-medium text-muted px-3 py-2 hidden sm:table-cell">Paid</th>
+                            <th className="text-right text-xs font-medium text-muted px-3 py-2">Balance</th>
+                            <th className="text-left text-xs font-medium text-muted px-3 py-2">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {ledgerData.invoices.length === 0 ? (
+                            <tr>
+                              <td colSpan="7" className="px-3 py-8 text-center text-muted">
+                                No invoices found
+                              </td>
+                            </tr>
+                          ) : (
+                            ledgerData.invoices.map((invoice) => (
+                              <tr key={invoice.id} className="border-t border-border hover:bg-[#F7F8FA]">
+                                <td className="px-3 py-3">
+                                  <Link 
+                                    to={`/invoices/${invoice.id}`}
+                                    className="font-mono text-xs text-accent hover:underline"
+                                  >
+                                    {invoice.invoiceNumber}
+                                  </Link>
+                                </td>
+                                <td className="px-3 py-3 text-sm">
+                                  {new Date(invoice.issueDate).toLocaleDateString('en-IN', {
+                                    day: '2-digit',
+                                    month: 'short',
+                                    year: 'numeric',
+                                  })}
+                                </td>
+                                <td className="px-3 py-3 text-sm">
+                                  {new Date(invoice.dueDate).toLocaleDateString('en-IN', {
+                                    day: '2-digit',
+                                    month: 'short',
+                                    year: 'numeric',
+                                  })}
+                                </td>
+                                <td className="px-3 py-3 text-sm text-right font-medium">
+                                  {formatCurrency(invoice.amount)}
+                                </td>
+                                <td className="px-3 py-3 text-sm text-right text-green-600 hidden sm:table-cell">
+                                  {formatCurrency(invoice.paid)}
+                                </td>
+                                <td className="px-3 py-3 text-sm text-right font-medium">
+                                  {formatCurrency(invoice.balance)}
+                                </td>
+                                <td className="px-3 py-3">
+                                  <StatusBadge status={invoice.status} />
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Payment History */}
+                  <div className="bg-white border border-border rounded-lg p-4">
+                    <h4 className="text-lg font-semibold text-[#1A1F2E] mb-4 flex items-center gap-2">
+                      <CreditCard size={20} />
+                      Payment History
+                    </h4>
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[640px]">
+                        <thead className="bg-[#F7F8FA]">
+                          <tr>
+                            <th className="text-left text-xs font-medium text-muted px-3 py-2">Date</th>
+                            <th className="text-left text-xs font-medium text-muted px-3 py-2">Invoice #</th>
+                            <th className="text-right text-xs font-medium text-muted px-3 py-2">Amount</th>
+                            <th className="text-left text-xs font-medium text-muted px-3 py-2 hidden sm:table-cell">Method</th>
+                            <th className="text-left text-xs font-medium text-muted px-3 py-2 hidden sm:table-cell">Reference</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {ledgerData.paymentHistory.length === 0 ? (
+                            <tr>
+                              <td colSpan="5" className="px-3 py-8 text-center text-muted">
+                                No payments found
+                              </td>
+                            </tr>
+                          ) : (
+                            ledgerData.paymentHistory.map((payment) => (
+                              <tr key={payment.id} className="border-t border-border hover:bg-[#F7F8FA]">
+                                <td className="px-3 py-3 text-sm">
+                                  {new Date(payment.date).toLocaleDateString('en-IN', {
+                                    day: '2-digit',
+                                    month: 'short',
+                                    year: 'numeric',
+                                  })}
+                                </td>
+                                <td className="px-3 py-3">
+                                  <Link 
+                                    to={`/invoices/${payment.invoiceId}`}
+                                    className="font-mono text-xs text-accent hover:underline"
+                                  >
+                                    {payment.invoiceNumber}
+                                  </Link>
+                                </td>
+                                <td className="px-3 py-3 text-sm text-right font-medium text-green-600">
+                                  {formatCurrency(payment.amount)}
+                                </td>
+                                <td className="px-3 py-3 text-sm hidden sm:table-cell">
+                                  {payment.method || 'Cash'}
+                                </td>
+                                <td className="px-3 py-3 text-sm text-muted hidden sm:table-cell">
+                                  {payment.reference || '-'}
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
