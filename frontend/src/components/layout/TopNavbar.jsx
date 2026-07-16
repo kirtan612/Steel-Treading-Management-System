@@ -1,5 +1,5 @@
 import { useSidebar } from "../../context/SidebarContext";
-import { Menu, Search, Bell, ChevronDown } from "lucide-react";
+import { Menu, Search, ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../utils/api";
@@ -59,16 +59,6 @@ export default function TopNavbar() {
         {/* Mobile search icon */}
         <button className="md:hidden p-2 rounded-[6px] text-[#5A6473] hover:bg-[#F7F8FA]">
           <Search size={18} />
-        </button>
-
-        {/* Notifications */}
-        <button className="relative p-2 rounded-[6px] text-[#5A6473]
-                           hover:bg-[#F7F8FA] hover:text-[#1A1F2E] transition-colors">
-          <Bell size={18} />
-          <span className="absolute top-1 right-1 w-4 h-4 bg-[#E85D26] text-white
-                           text-[10px] font-bold rounded-full flex items-center justify-center">
-            3
-          </span>
         </button>
 
         {/* User dropdown */}

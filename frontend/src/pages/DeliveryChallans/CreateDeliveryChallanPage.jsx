@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Truck, FileText, Calendar, User } from 'lucide-react';
 import toast from 'react-hot-toast';
 import PageHeader from '../../components/ui/PageHeader';
-import FormField from '../../components/ui/FormField';
+import { FormField } from '../../components/ui/FormField';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { api } from '../../utils/api';
 
@@ -48,7 +48,8 @@ export default function CreateDeliveryChallanPage() {
       const result = await api.get('/orders?status=confirmed&limit=100');
       
       if (result.success) {
-        setOrders(result.data || []);
+        // Handle nested orders array in response
+        setOrders(result.data?.orders || result.data || []);
       }
     } catch (error) {
       toast.error('Failed to fetch orders');

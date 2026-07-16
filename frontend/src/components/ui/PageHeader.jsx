@@ -1,4 +1,18 @@
-export default function PageHeader({ title, subtitle, action }) {
+export default function PageHeader({ title, subtitle, action, showBackButton, backTo }) {
+  // If action is a React element (like Link), render it directly
+  if (action && typeof action === 'object' && action.type) {
+    return (
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div>
+          <h2 className="text-xl sm:text-2xl font-heading font-bold text-[#1A1F2E]">{title}</h2>
+          {subtitle && <p className="text-sm text-muted mt-1">{subtitle}</p>}
+        </div>
+        <div>{action}</div>
+      </div>
+    );
+  }
+
+  // Otherwise, treat it as an action object with onClick, icon, and label
   return (
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
       <div>
@@ -12,7 +26,7 @@ export default function PageHeader({ title, subtitle, action }) {
         >
           {action.icon && <action.icon size={18} />}
           <span className="hidden sm:inline">{action.label}</span>
-          <span className="sm:hidden">{action.label.split(' ')[0]}</span>
+          <span className="sm:hidden">{action.label?.split(' ')[0] || action.label}</span>
         </button>
       )}
     </div>

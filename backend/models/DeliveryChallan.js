@@ -1,4 +1,4 @@
-const { DataTypes } = require('sequelize');
+const { DataTypes, Op } = require('sequelize');
 const { sequelize } = require('../config/database');
 
 const DeliveryChallan = sequelize.define('DeliveryChallan', {
@@ -113,13 +113,31 @@ const DeliveryChallan = sequelize.define('DeliveryChallan', {
   tableName: 'delivery_challans',
   timestamps: true,
   hooks: {
-    beforeCreate: async (challan) => {
+    beforeValidate: async (challan) => {
       if (!challan.challanNumber) {
-        const count = await DeliveryChallan.count();
         const currentDate = new Date();
         const year = currentDate.getFullYear().toString().slice(-2);
         const month = String(currentDate.getMonth() + 1).padStart(2, '0');
-        challan.challanNumber = `DC${year}${month}${String(count + 1).padStart(4, '0')}`;
+        const prefix = `DC${year}${month}`;
+        
+        // Find the last challan number with this prefix
+        const lastChallan = await DeliveryChallan.findOne({
+          where: {
+            challanNumber: {
+              [Op.like]: `${prefix}%`
+            }
+          },
+          order: [['createdAt', 'DESC']],
+          limit: 1
+        });
+        
+        let nextNumber = 1;
+        if (lastChallan) {
+          const lastNumber = parseInt(lastChallan.challanNumber.slice(-4));
+          nextNumber = lastNumber + 1;
+        }
+        
+        challan.challanNumber = `${prefix}${String(nextNumber).padStart(4, '0')}`;
       }
     }
   }
