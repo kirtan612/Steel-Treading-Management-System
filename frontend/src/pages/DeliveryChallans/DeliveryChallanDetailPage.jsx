@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Printer, Edit, Truck, CheckCircle, FileText, Calendar, MapPin } from 'lucide-react';
+import { ArrowLeft, Printer, Download, Truck, CheckCircle, FileText, Calendar, MapPin } from 'lucide-react';
 import toast from 'react-hot-toast';
 import PageHeader from '../../components/ui/PageHeader';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import StatusBadge from '../../components/ui/StatusBadge';
 import ConfirmModal from '../../components/ui/ConfirmModal';
 import { api } from '../../utils/api';
+import { generateChallanPDF } from '../../utils/generateChallanPDF';
 
 export default function DeliveryChallanDetailPage() {
   const { id } = useParams();
@@ -39,7 +40,7 @@ export default function DeliveryChallanDetailPage() {
   };
 
   const handlePrint = () => {
-    window.print();
+    generateChallanPDF(challan);
   };
 
   const handleMarkDelivered = async () => {
@@ -125,8 +126,8 @@ export default function DeliveryChallanDetailPage() {
                 onClick={handlePrint}
                 className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary/90"
               >
-                <Printer size={16} />
-                Print Challan
+                <Download size={16} />
+                Download PDF
               </button>
             </div>
           }

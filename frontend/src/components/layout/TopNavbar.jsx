@@ -3,6 +3,7 @@ import { Menu, Search, ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../utils/api";
+import toast from "react-hot-toast";
 
 export default function TopNavbar() {
   const { toggleMobile } = useSidebar();
@@ -83,16 +84,12 @@ export default function TopNavbar() {
               <div className="fixed inset-0 z-10" onClick={() => setShowUserMenu(false)} />
               <div className="absolute right-0 top-full mt-1 w-44 bg-white border border-[#E2E6EA]
                               rounded-[8px] shadow-card py-1 z-20">
-                <button className="w-full text-left px-4 py-2 text-sm text-[#1A1F2E]
-                                   hover:bg-[#F7F8FA] transition-colors">
-                  Profile
-                </button>
                 <button
-                  onClick={() => navigate("/settings")}
+                  onClick={() => { setShowUserMenu(false); navigate('/settings'); }}
                   className="w-full text-left px-4 py-2 text-sm text-[#1A1F2E]
                              hover:bg-[#F7F8FA] transition-colors"
                 >
-                  Settings
+                  Profile & Settings
                 </button>
                 <div className="my-1 border-t border-[#E2E6EA]" />
                 <button
