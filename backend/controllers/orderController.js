@@ -180,6 +180,7 @@ const createOrder = async (req, res, next) => {
         itemName: inventoryItem.name,
         itemCode: inventoryItem.itemCode,
         grade: inventoryItem.grade,
+        hsnCode: inventoryItem.hsnCode || "73063010",
         subtotal: parseFloat(itemSubtotal.toFixed(2))
       });
     }
@@ -187,7 +188,7 @@ const createOrder = async (req, res, next) => {
     // Calculate taxes
     const taxableAmount = subtotal - discountAmount;
     const customerState = customer.billingState || "Gujarat";
-    const { cgst, sgst, igst, totalTax } = calcGST(taxableAmount, customerState);
+    const { cgst, sgst, igst, totalTax } = calcGST(taxableAmount, customerState, customer.gstNumber);
 
     const grandTotal = taxableAmount + totalTax;
     const orderNumber = await generateOrderNumber();
@@ -271,6 +272,7 @@ const updateOrder = async (req, res, next) => {
           itemName: inventoryItem.name,
           itemCode: inventoryItem.itemCode,
           grade: inventoryItem.grade,
+          hsnCode: inventoryItem.hsnCode || "73063010",
           subtotal: parseFloat(itemSubtotal.toFixed(2))
         });
       }
@@ -278,7 +280,7 @@ const updateOrder = async (req, res, next) => {
       const customer = await Customer.findByPk(order.customerId);
       const taxableAmount = subtotal - discountAmount;
       const customerState = customer.billingState || "Gujarat";
-      const { cgst, sgst, igst, totalTax } = calcGST(taxableAmount, customerState);
+      const { cgst, sgst, igst, totalTax } = calcGST(taxableAmount, customerState, customer.gstNumber);
 
       updateFields.items = populatedItems;
       updateFields.subtotal = parseFloat(subtotal.toFixed(2));

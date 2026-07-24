@@ -4,6 +4,9 @@ import { ArrowLeft, Plus, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api } from '../../utils/api';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
+import { companyConfig } from '../../config/company';
+import { getGSTStateCode } from '../../utils/validators';
+
 
 export default function CreateOrderPage() {
   const navigate = useNavigate();
@@ -79,9 +82,50 @@ export default function CreateOrderPage() {
     return sum + (itemSubtotal * (item.discount / 100));
   }, 0);
   const taxableAmount = subtotal;
-  const cgst = taxableAmount * 0.09;
-  const sgst = taxableAmount * 0.09;
-  const grandTotal = taxableAmount + cgst + sgst;
+
+  // Dynamic GST calculation
+  const getTaxBreakdown = () => {
+    if (!selectedCustomer) {
+      return { cgst: 0, sgst: 0, igst: 0, totalTax: 0 };
+    }
+    
+    const isSameState = (() => {
+      // 1. Compare GSTIN state codes if both are present
+      if (selectedCustomer.gstNumber && companyConfig.gstNumber) {
+        const custGstState = selectedCustomer.gstNumber.trim().substring(0, 2);
+        const compGstState = companyConfig.gstNumber.trim().substring(0, 2);
+        if (/^\d{2}$/.test(custGstState) && /^\d{2}$/.test(compGstState)) {
+          return custGstState === compGstState;
+        }
+      }
+      
+      // 2. Fallback to address state matching
+      const customerStateCode = getGSTStateCode(selectedCustomer.billingAddress?.state);
+      const companyStateCode = getGSTStateCode(companyConfig.state);
+      if (customerStateCode && companyStateCode) {
+        return customerStateCode === companyStateCode;
+      }
+      
+      // 3. Last fallback: string matching
+      if (selectedCustomer.billingAddress?.state) {
+        return selectedCustomer.billingAddress.state.trim().toLowerCase() === companyConfig.state.trim().toLowerCase();
+      }
+      
+      return true; // Default to same state (CGST+SGST)
+    })();
+
+    if (isSameState) {
+      const cgstVal = parseFloat((taxableAmount * 0.09).toFixed(2));
+      const sgstVal = parseFloat((taxableAmount * 0.09).toFixed(2));
+      return { cgst: cgstVal, sgst: sgstVal, igst: 0, totalTax: cgstVal + sgstVal };
+    } else {
+      const igstVal = parseFloat((taxableAmount * 0.18).toFixed(2));
+      return { cgst: 0, sgst: 0, igst: igstVal, totalTax: igstVal };
+    }
+  };
+
+  const { cgst, sgst, igst, totalTax } = getTaxBreakdown();
+  const grandTotal = taxableAmount + totalTax;
 
   const formatCurrency = (value) => new Intl.NumberFormat('en-IN', {
     style: 'currency',
@@ -316,14 +360,24 @@ export default function CreateOrderPage() {
                 <span className="text-muted">Taxable Amount:</span>
                 <span className="font-medium">{formatCurrency(taxableAmount)}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-muted">CGST (9%):</span>
-                <span className="font-medium">{formatCurrency(cgst)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted">SGST (9%):</span>
-                <span className="font-medium">{formatCurrency(sgst)}</span>
-              </div>
+              {cgst > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted">CGST (9%):</span>
+                  <span className="font-medium">{formatCurrency(cgst)}</span>
+                </div>
+              )}
+              {sgst > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted">SGST (9%):</span>
+                  <span className="font-medium">{formatCurrency(sgst)}</span>
+                </div>
+              )}
+              {igst > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted">IGST (18%):</span>
+                  <span className="font-medium">{formatCurrency(igst)}</span>
+                </div>
+              )}
               <div className="h-px bg-border my-3" />
               <div className="flex justify-between text-lg">
                 <span className="font-heading font-bold">Grand Total:</span>

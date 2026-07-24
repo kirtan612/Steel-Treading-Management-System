@@ -16,18 +16,18 @@ const challanValidation = [
   body("orderId").isUUID().withMessage("Valid order ID is required"),
   body("vehicleNumber").trim().isLength({ min: 2, max: 20 }).withMessage("Vehicle number must be between 2-20 characters"),
   body("driverName").trim().isLength({ min: 2, max: 100 }).withMessage("Driver name must be between 2-100 characters"),
-  body("driverPhone").optional().isMobilePhone("en-IN").withMessage("Enter a valid Indian mobile number"),
-  body("dispatchDate").optional().isISO8601().withMessage("Enter a valid dispatch date"),
-  body("eWayBillNo").optional().isLength({ max: 20 }).withMessage("E-Way bill number too long"),
-  body("transporterName").optional().isLength({ max: 200 }).withMessage("Transporter name too long")
+  body("driverPhone").optional({ checkFalsy: true }).isMobilePhone("en-IN").withMessage("Enter a valid Indian mobile number"),
+  body("dispatchDate").optional({ checkFalsy: true }).isISO8601().withMessage("Enter a valid dispatch date"),
+  body("eWayBillNo").optional({ checkFalsy: true }).isLength({ max: 20 }).withMessage("E-Way bill number too long"),
+  body("transporterName").optional({ checkFalsy: true }).isLength({ max: 200 }).withMessage("Transporter name too long")
 ];
 
 const updateValidation = [
   body("vehicleNumber").optional().trim().isLength({ min: 2, max: 20 }).withMessage("Vehicle number must be between 2-20 characters"),
   body("driverName").optional().trim().isLength({ min: 2, max: 100 }).withMessage("Driver name must be between 2-100 characters"),
-  body("driverPhone").optional().isMobilePhone("en-IN").withMessage("Enter a valid Indian mobile number"),
-  body("eWayBillNo").optional().isLength({ max: 20 }).withMessage("E-Way bill number too long"),
-  body("transporterName").optional().isLength({ max: 200 }).withMessage("Transporter name too long")
+  body("driverPhone").optional({ checkFalsy: true }).isMobilePhone("en-IN").withMessage("Enter a valid Indian mobile number"),
+  body("eWayBillNo").optional({ checkFalsy: true }).isLength({ max: 20 }).withMessage("E-Way bill number too long"),
+  body("transporterName").optional({ checkFalsy: true }).isLength({ max: 200 }).withMessage("Transporter name too long")
 ];
 
 // All routes require authentication

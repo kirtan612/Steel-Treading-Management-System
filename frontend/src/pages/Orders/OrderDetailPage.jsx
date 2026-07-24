@@ -195,7 +195,10 @@ export default function OrderDetailPage() {
               {customer.company && <p><span className="text-muted">Company:</span> {customer.company}</p>}
               <p><span className="text-muted">Phone:</span> {customer.phone}</p>
               {customer.gstNumber && (
-                <p><span className="text-muted">GST:</span> <span className="font-mono text-xs">{customer.gstNumber}</span></p>
+                <p><span className="text-muted">GSTIN:</span> <span className="font-mono text-xs">{customer.gstNumber}</span></p>
+              )}
+              {customer.panNumber && (
+                <p><span className="text-muted">PAN:</span> <span className="font-mono text-xs">{customer.panNumber}</span></p>
               )}
               {addressString && <p><span className="text-muted">Address:</span> {addressString}</p>}
             </div>

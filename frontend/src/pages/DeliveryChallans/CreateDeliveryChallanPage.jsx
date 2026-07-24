@@ -315,7 +315,7 @@ export default function CreateDeliveryChallanPage() {
                     <p className="text-xs text-muted">Qty: {item.quantity}</p>
                   </div>
                   <div className="text-sm font-medium text-[#1A1F2E]">
-                    {formatCurrency(item.totalPrice)}
+                    {formatCurrency(item.subtotal || item.totalPrice)}
                   </div>
                 </div>
               ))}

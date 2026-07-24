@@ -8,6 +8,8 @@ import ConfirmModal from '../../components/ui/ConfirmModal';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { api } from '../../utils/api';
 import { FormField, inputClass } from '../../components/ui/FormField';
+import { validators } from '../../utils/validators';
+
 
 export default function CustomersPage() {
   const navigate = useNavigate();
@@ -115,6 +117,8 @@ export default function CustomersPage() {
       email: '',
       customerType: 'Retail',
       creditLimit: '0',
+      gstNumber: '',
+      panNumber: '',
       billingAddress: {
         street: '',
         city: '',
@@ -136,6 +140,8 @@ export default function CustomersPage() {
       email: customer.email || '',
       customerType: customer.customerType || 'Retail',
       creditLimit: String(customer.creditLimit || '0'),
+      gstNumber: customer.gstNumber || '',
+      panNumber: customer.panNumber || '',
       billingAddress: {
         street: customer.billingAddress?.street || '',
         city: customer.billingAddress?.city || '',
@@ -158,9 +164,17 @@ export default function CustomersPage() {
         }
       }));
     } else {
+      let extra = {};
+      if (field === 'gstNumber') {
+        const cleanGst = value.trim().toUpperCase();
+        if (cleanGst.length >= 12 && /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}/.test(cleanGst)) {
+          extra.panNumber = cleanGst.substring(2, 12);
+        }
+      }
       setModalForm(prev => ({
         ...prev,
-        [field]: value
+        [field]: value,
+        ...extra
       }));
     }
     if (errors[field]) {
@@ -187,6 +201,27 @@ export default function CustomersPage() {
       newErrors.pincode = 'Enter a valid 6-digit PIN code';
     }
 
+    // GSTIN validation
+    if (modalForm.gstNumber.trim()) {
+      const gstErr = validators.gstNumber(modalForm.gstNumber);
+      if (gstErr) {
+        newErrors.gstNumber = gstErr;
+      } else {
+        const matchErr = validators.gstMatchesState(modalForm.gstNumber, modalForm.billingAddress.state);
+        if (matchErr) {
+          newErrors.gstNumber = matchErr;
+        }
+      }
+    }
+
+    // PAN validation
+    if (modalForm.panNumber.trim()) {
+      const panErr = validators.panNumber(modalForm.panNumber);
+      if (panErr) {
+        newErrors.panNumber = panErr;
+      }
+    }
+
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
       return;
@@ -201,6 +236,8 @@ export default function CustomersPage() {
         email: modalForm.email.trim() || undefined,
         customerType: modalForm.customerType,
         creditLimit: parseFloat(modalForm.creditLimit) || 0,
+        gstNumber: modalForm.gstNumber.trim().toUpperCase() || undefined,
+        panNumber: modalForm.panNumber.trim().toUpperCase() || undefined,
         billingAddress: {
           street: modalForm.billingAddress.street.trim() || undefined,
           city: modalForm.billingAddress.city.trim() || undefined,
@@ -441,15 +478,26 @@ export default function CustomersPage() {
                 </FormField>
               </div>
 
-              <FormField label="GST Number">
-                <input
-                  type="text"
-                  value={modalForm.gstNumber}
-                  onChange={handleFormChange('gstNumber')}
-                  placeholder="e.g. 24ABCDE1234F1Z5"
-                  className={inputClass()}
-                />
-              </FormField>
+              <div className="grid grid-cols-2 gap-4">
+                <FormField label="GST Number" error={errors.gstNumber}>
+                  <input
+                    type="text"
+                    value={modalForm.gstNumber}
+                    onChange={handleFormChange('gstNumber')}
+                    placeholder="e.g. 24ABCDE1234F1Z5"
+                    className={inputClass(errors.gstNumber)}
+                  />
+                </FormField>
+                <FormField label="PAN Number" error={errors.panNumber}>
+                  <input
+                    type="text"
+                    value={modalForm.panNumber}
+                    onChange={handleFormChange('panNumber')}
+                    placeholder="e.g. ABCDE1234F"
+                    className={inputClass(errors.panNumber)}
+                  />
+                </FormField>
+              </div>
 
               <div className="border-t border-border pt-3">
                 <h4 className="text-xs font-semibold text-muted uppercase tracking-wide mb-3">Billing Address</h4>

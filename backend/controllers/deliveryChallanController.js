@@ -121,13 +121,20 @@ const createDeliveryChallan = async (req, res, next) => {
     }
 
     // Calculate totals from order items
-    const subtotal = order.items.reduce((sum, item) => sum + (item.totalPrice || 0), 0);
+    const subtotal = order.items.reduce((sum, item) => sum + (item.subtotal || item.totalPrice || 0), 0);
     const totalQuantity = order.items.reduce((sum, item) => sum + (item.quantity || 0), 0);
+
+    // Map items to include both subtotal and totalPrice for backward/forward compatibility
+    const mappedItems = order.items.map(item => ({
+      ...item,
+      totalPrice: item.subtotal || item.totalPrice || 0,
+      subtotal: item.subtotal || item.totalPrice || 0
+    }));
 
     const challanData = {
       ...req.body,
       customerId: order.customerId,
-      items: order.items,
+      items: mappedItems,
       subtotal: parseFloat(subtotal.toFixed(2)),
       totalQuantity: parseFloat(totalQuantity.toFixed(2)),
       createdBy: req.user.id

@@ -255,7 +255,7 @@ export default function DeliveryChallanDetailPage() {
                       {formatCurrency(item.unitPrice)}
                     </td>
                     <td className="border border-gray-300 px-3 py-2 text-right">
-                      {formatCurrency(item.totalPrice)}
+                      {formatCurrency(item.subtotal || item.totalPrice)}
                     </td>
                   </tr>
                 ))}

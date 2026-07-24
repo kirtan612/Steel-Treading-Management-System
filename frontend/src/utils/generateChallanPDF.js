@@ -1,5 +1,7 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { companyConfig } from '../config/company';
+
 
 const formatINR = (amount) => {
   const num = parseFloat(amount) || 0;
@@ -30,7 +32,7 @@ export const generateChallanPDF = (challan) => {
   doc.setFontSize(20);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...navy);
-  doc.text('STEELTRACK PVT. LTD.', margin, y);
+  doc.text(companyConfig.name.toUpperCase(), margin, y);
 
   doc.setFontSize(22);
   doc.setTextColor(...orange);
@@ -40,11 +42,11 @@ export const generateChallanPDF = (challan) => {
   doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(...gray);
-  doc.text('123 Industrial Area, Steel City, Gujarat - 380001', margin, y);
+  doc.text(`${companyConfig.address}, ${companyConfig.city} - ${companyConfig.pincode}, ${companyConfig.state}`, margin, y);
   doc.text(challan.challanNumber, pageWidth - margin, y, { align: 'right' });
 
   y += 4;
-  doc.text('GST: 24ABCDE1234F1Z5  |  Phone: +91 98765 43210', margin, y);
+  doc.text(`GSTIN: ${companyConfig.gstNumber}  |  Phone: ${companyConfig.phone}`, margin, y);
   doc.text('Date: ' + formatDate(challan.createdAt), pageWidth - margin, y, { align: 'right' });
 
   y += 5;
@@ -92,7 +94,10 @@ export const generateChallanPDF = (challan) => {
     doc.text('PIN: ' + challan.order.customer.billingPincode, col1X + 3, cy); cy += 4;
   }
   if (challan.order?.customer?.gstNumber) {
-    doc.text('GST: ' + challan.order.customer.gstNumber, col1X + 3, cy);
+    doc.text('GSTIN: ' + challan.order.customer.gstNumber, col1X + 3, cy); cy += 4;
+  }
+  if (challan.order?.customer?.panNumber) {
+    doc.text('PAN: ' + challan.order.customer.panNumber, col1X + 3, cy);
   }
 
   // Transport box
@@ -178,9 +183,10 @@ export const generateChallanPDF = (challan) => {
   const tableRows = (challan.items || []).map((item, i) => {
     const name = item.itemName || item.name || '-';
     const grade = item.grade ? ` (${item.grade})` : '';
+    const hsn = item.hsnCode || '73063010';
     return [
       (i + 1).toString(),
-      name + grade,
+      name + grade + `\nHSN: ${hsn}`,
       (parseFloat(item.quantity || 0)).toLocaleString('en-IN'),
       item.unit || '-',
       formatINR(item.unitPrice || 0),

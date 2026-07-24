@@ -1,5 +1,7 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { companyConfig } from '../config/company';
+
 
 const formatINR = (amount) => {
   const num = parseFloat(amount) || 0;
@@ -30,7 +32,7 @@ export const generateInvoicePDF = (invoice) => {
   doc.setFontSize(20);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...navy);
-  doc.text('STEELTRACK PVT. LTD.', margin, y);
+  doc.text(companyConfig.name.toUpperCase(), margin, y);
 
   // INVOICE label
   doc.setFontSize(26);
@@ -41,11 +43,11 @@ export const generateInvoicePDF = (invoice) => {
   doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(...gray);
-  doc.text('123 Industrial Area, Phase 2, Mumbai - 400001', margin, y);
+  doc.text(`${companyConfig.address}, ${companyConfig.city} - ${companyConfig.pincode}, ${companyConfig.state}`, margin, y);
   doc.text(invoice.invoiceNumber, pageWidth - margin, y, { align: 'right' });
 
   y += 4;
-  doc.text('GST: 27AABCU9603R1ZX  |  Phone: +91 98765 43210', margin, y);
+  doc.text(`GSTIN: ${companyConfig.gstNumber}  |  Phone: ${companyConfig.phone}`, margin, y);
   doc.text('Date: ' + formatDate(invoice.issueDate), pageWidth - margin, y, { align: 'right' });
 
   y += 4;
@@ -82,6 +84,10 @@ export const generateInvoicePDF = (invoice) => {
     doc.text('GSTIN: ' + invoice.customer.gstNumber, margin, y);
     y += 4;
   }
+  if (invoice.customer?.panNumber) {
+    doc.text('PAN: ' + invoice.customer.panNumber, margin, y);
+    y += 4;
+  }
   if (invoice.customer?.billingAddress) {
     const a = invoice.customer.billingAddress;
     if (a.street) { doc.text(a.street, margin, y); y += 4; }
@@ -93,7 +99,8 @@ export const generateInvoicePDF = (invoice) => {
 
   // ── ITEMS TABLE ─────────────────────────────────────────
   const tableRows = (invoice.items || []).map((item, i) => {
-    const desc = [item.itemName, item.grade].filter(Boolean).join(' - ');
+    const hsn = item.hsnCode || '73063010';
+    const desc = [item.itemName, item.grade].filter(Boolean).join(' - ') + `\nHSN: ${hsn}`;
     const qty  = parseFloat(item.quantity || 0).toLocaleString('en-IN');
     const unit = item.unit || '';
     const rate = formatINR(item.unitPrice || item.rate || 0);
@@ -235,9 +242,9 @@ export const generateInvoicePDF = (invoice) => {
   const splitTerms = doc.splitTextToSize(terms, pageWidth / 2 - margin - 5);
   doc.text(splitTerms, margin, y);
 
-  doc.text('Bank Name: State Bank of India', col2X, y);     y += 4;
-  doc.text('Account: 1234567890123456',       col2X, y);     y += 4;
-  doc.text('IFSC: SBIN0001234',               col2X, y);
+  doc.text(`Bank Name: ${companyConfig.bankName}`, col2X, y);     y += 4;
+  doc.text(`Account: ${companyConfig.accountNumber}`,       col2X, y);     y += 4;
+  doc.text(`IFSC: ${companyConfig.ifscCode}`,               col2X, y);
 
   y += Math.max(splitTerms.length * 4, 12) + 4;
 

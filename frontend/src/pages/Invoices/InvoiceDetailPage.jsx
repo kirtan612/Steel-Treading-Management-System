@@ -6,6 +6,8 @@ import { generateInvoicePDF } from '../../utils/generateInvoicePDF';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { api } from '../../utils/api';
 import { FormField, inputClass } from '../../components/ui/FormField';
+import { companyConfig } from '../../config/company';
+
 
 export default function InvoiceDetailPage() {
   const { id } = useParams();
@@ -80,6 +82,7 @@ export default function InvoiceDetailPage() {
           name: invoice.customer?.name || 'N/A',
           company: invoice.customer?.company || '',
           gstNumber: invoice.customer?.gstNumber || '',
+          panNumber: invoice.customer?.panNumber || '',
           billingAddress: invoice.customer?.billingAddress || {
             street: '',
             city: '',
@@ -95,6 +98,7 @@ export default function InvoiceDetailPage() {
           unit: item.unit,
           rate: item.unitPrice,
           amount: item.subtotal,
+          hsnCode: item.hsnCode || '',
         })),
         subtotal: invoice.subtotal,
         cgst: invoice.cgst,
@@ -216,11 +220,11 @@ export default function InvoiceDetailPage() {
         {/* Header */}
         <div className="flex justify-between mb-8">
           <div>
-            <h1 className="text-2xl font-heading font-bold text-[#1A1F2E] mb-2">STEELTRACK PVT. LTD.</h1>
-            <p className="text-sm text-muted">123 Industrial Area, Phase 2</p>
-            <p className="text-sm text-muted">Mumbai - 400001</p>
-            <p className="text-sm text-muted">GST: 27AABCU9603R1ZX</p>
-            <p className="text-sm text-muted">Phone: +91 98765 43210</p>
+            <h1 className="text-2xl font-heading font-bold text-[#1A1F2E] mb-2">{companyConfig.name}</h1>
+            <p className="text-sm text-muted">{companyConfig.address}</p>
+            <p className="text-sm text-muted">{companyConfig.city} - {companyConfig.pincode}, {companyConfig.state}</p>
+            <p className="text-sm text-muted">GSTIN: {companyConfig.gstNumber}</p>
+            <p className="text-sm text-muted">Phone: {companyConfig.phone}</p>
           </div>
           <div className="text-right">
             <h2 className="text-xl font-heading font-bold text-[#1A1F2E] mb-2">INVOICE</h2>
@@ -236,6 +240,7 @@ export default function InvoiceDetailPage() {
           <p className="font-semibold text-[#1A1F2E] text-base">{invoice.customer?.name || 'N/A'}</p>
           {invoice.customer?.company && <p className="text-sm text-muted">{invoice.customer.company}</p>}
           {invoice.customer?.gstNumber && <p className="text-xs text-muted font-mono mt-1">GSTIN: {invoice.customer.gstNumber}</p>}
+          {invoice.customer?.panNumber && <p className="text-xs text-muted font-mono mt-1 font-semibold">PAN: {invoice.customer.panNumber}</p>}
         </div>
 
         {/* Items Table */}
@@ -322,9 +327,9 @@ export default function InvoiceDetailPage() {
             }`}>{invoice.balance === 0 ? 'Paid ✓' : invoice.amountPaid > 0 ? 'Partial' : 'Unpaid'}</span></p>
           </div>
           <div>
-            <p className="text-muted mb-1">Bank Name: State Bank of India</p>
-            <p className="text-muted">A/C Number: 1234567890123456</p>
-            <p className="text-muted">IFSC Code: SBIN0001234</p>
+            <p className="text-muted mb-1">Bank Name: {companyConfig.bankName}</p>
+            <p className="text-muted">A/C Number: {companyConfig.accountNumber}</p>
+            <p className="text-muted">IFSC Code: {companyConfig.ifscCode}</p>
           </div>
         </div>
 

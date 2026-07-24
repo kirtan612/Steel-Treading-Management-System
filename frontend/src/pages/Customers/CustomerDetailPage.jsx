@@ -148,7 +148,10 @@ export default function CustomerDetailPage() {
             </div>
             <div className="flex flex-wrap items-center gap-3">
               {customer.gstNumber && (
-                <span className="font-mono text-sm text-muted">GST: {customer.gstNumber}</span>
+                <span className="font-mono text-sm text-[#1A1F2E] bg-gray-100 px-2 py-0.5 rounded">GSTIN: {customer.gstNumber}</span>
+              )}
+              {customer.panNumber && (
+                <span className="font-mono text-sm text-[#1A1F2E] bg-gray-100 px-2 py-0.5 rounded">PAN: {customer.panNumber}</span>
               )}
               <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getTypeBadgeColor(customer.customerType)}`}>
                 {customer.customerType}
